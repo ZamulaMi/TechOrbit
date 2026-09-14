@@ -261,11 +261,17 @@ adminRouter.post('/changes/:id/resolve', (req: AuthenticatedRequest, res: Respon
 });
 
 // ----------------------------------------------------
-// 7. SOURCES
+// 7. SOURCES & INGESTION ENGINE
 // ----------------------------------------------------
 adminRouter.get('/sources', (req: AuthenticatedRequest, res: Response) => {
   const sources = SourceService.getAllSources();
   res.json(sources);
+});
+
+adminRouter.get('/sources/:id', (req: AuthenticatedRequest, res: Response) => {
+  const source = SourceService.getSourceById(req.params.id);
+  if (!source) return res.status(404).json({ error: 'Source not found' });
+  res.json(source);
 });
 
 adminRouter.post('/sources', (req: AuthenticatedRequest, res: Response) => {
@@ -275,7 +281,7 @@ adminRouter.post('/sources', (req: AuthenticatedRequest, res: Response) => {
     action: 'SOURCE_CREATED',
     entityType: 'source',
     entityId: source.id,
-    newValues: { name: source.name, base_url: source.base_url }
+    newValues: { name: source.name, base_url: source.base_url, parser_type: source.parser_type }
   });
   res.status(201).json(source);
 });
@@ -293,6 +299,19 @@ adminRouter.put('/sources/:id', (req: AuthenticatedRequest, res: Response) => {
   res.json(source);
 });
 
+adminRouter.post('/sources/:id/pause', (req: AuthenticatedRequest, res: Response) => {
+  const result = SourceService.togglePause(req.params.id);
+  if (!result.success || !result.source) return res.status(404).json({ error: 'Source not found' });
+  AuditService.log({
+    userId: req.user!.id,
+    action: 'SOURCE_PAUSE_TOGGLED',
+    entityType: 'source',
+    entityId: req.params.id,
+    newValues: { sync_enabled: result.source.sync_enabled, status: result.source.status }
+  });
+  res.json(result.source);
+});
+
 adminRouter.delete('/sources/:id', (req: AuthenticatedRequest, res: Response) => {
   const success = SourceService.deleteSource(req.params.id);
   if (!success) return res.status(404).json({ error: 'Source not found' });
@@ -306,21 +325,43 @@ adminRouter.delete('/sources/:id', (req: AuthenticatedRequest, res: Response) =>
 });
 
 adminRouter.post('/sources/test', async (req: AuthenticatedRequest, res: Response) => {
-  const { url } = req.body;
+  const { url, parserType, config } = req.body;
   if (!url) return res.status(400).json({ error: 'URL is required' });
-  const result = await SourceService.testConnection(url);
-  res.json(result);
+  try {
+    const diagnostic = await SourceService.testSource(url, parserType, config);
+    res.json(diagnostic);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 adminRouter.post('/sources/:id/sync', async (req: AuthenticatedRequest, res: Response) => {
-  const result = await SourceImporter.triggerSourceSync(req.params.id, req.user!.id);
-  res.json(result);
+  try {
+    const result = await SourceImporter.triggerSourceSync(req.params.id, req.user!.id);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 adminRouter.get('/sources/sync-jobs', (req: AuthenticatedRequest, res: Response) => {
   const sourceId = req.query.sourceId as string | undefined;
-  const jobs = SourceService.getSyncJobs(sourceId);
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 30;
+  const jobs = SourceService.getSyncJobs(sourceId, limit);
   res.json(jobs);
+});
+
+adminRouter.get('/sources/:id/logs', (req: AuthenticatedRequest, res: Response) => {
+  const jobId = req.query.jobId as string | undefined;
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+  const logs = SourceService.getSyncLogs(req.params.id, jobId, limit);
+  res.json(logs);
+});
+
+adminRouter.get('/sources/:id/articles', (req: AuthenticatedRequest, res: Response) => {
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+  const articles = SourceService.getArticlesForSource(req.params.id, limit);
+  res.json(articles);
 });
 
 // ----------------------------------------------------

@@ -384,6 +384,31 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_source_articles_source_id ON source_articles(source_id);
   `);
 
+  // Dynamic migrations for Sources & Sync pipeline
+  const migrateColumn = (table: string, colDef: string) => {
+    try {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${colDef}`);
+    } catch {
+      // Column already exists
+    }
+  };
+
+  migrateColumn('sources', 'feed_url TEXT DEFAULT ""');
+  migrateColumn('sources', 'sitemap_url TEXT DEFAULT ""');
+  migrateColumn('sources', 'default_category_id TEXT DEFAULT "cat_smartphones"');
+  migrateColumn('sources', 'category_mapping TEXT DEFAULT "{}"');
+  migrateColumn('sources', 'max_pages_per_sync INTEGER DEFAULT 2');
+  migrateColumn('sources', 'max_articles_per_sync INTEGER DEFAULT 10');
+  migrateColumn('sources', 'request_delay_ms INTEGER DEFAULT 500');
+  migrateColumn('sources', 'retry_count INTEGER DEFAULT 3');
+  migrateColumn('sources', 'min_content_length INTEGER DEFAULT 100');
+  migrateColumn('sources', 'max_content_length INTEGER DEFAULT 50000');
+  migrateColumn('sources', 'user_agent TEXT DEFAULT "TechOrbitBot/1.0 (+https://techorbit.media/bot)"');
+  migrateColumn('sources', 'headers_json TEXT DEFAULT "{}"');
+
+  migrateColumn('sync_jobs', 'duration_ms INTEGER DEFAULT 0');
+  migrateColumn('sync_jobs', 'triggered_by TEXT DEFAULT "scheduler"');
+
   seedData();
 }
 

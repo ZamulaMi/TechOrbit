@@ -43,6 +43,8 @@ export interface Source {
   id: string;
   name: string;
   base_url: string;
+  feed_url?: string;
+  sitemap_url?: string;
   enabled: boolean;
   status: 'active' | 'paused' | 'error' | 'syncing';
   description: string;
@@ -52,6 +54,16 @@ export interface Source {
   article_url_patterns: string; // comma-separated or regex
   excluded_url_patterns: string;
   allowed_categories: string; // comma-separated
+  category_mapping?: string; // JSON string
+  default_category_id?: string;
+  max_pages_per_sync?: number;
+  max_articles_per_sync?: number;
+  request_delay_ms?: number;
+  retry_count?: number;
+  min_content_length?: number;
+  max_content_length?: number;
+  user_agent?: string;
+  headers_json?: string;
   sync_enabled: boolean;
   sync_interval_minutes: number;
   last_sync_at: string | null;
@@ -60,6 +72,10 @@ export interface Source {
   last_error_at: string | null;
   created_at: string;
   updated_at: string;
+  // Computed stats
+  total_articles?: number;
+  total_updates?: number;
+  total_errors?: number;
 }
 
 export interface SourcePage {
@@ -314,12 +330,15 @@ export interface SeoSetting {
 export interface SyncJob {
   id: string;
   source_id: string;
+  source_name?: string;
   status: 'running' | 'completed' | 'failed';
   items_found: number;
   items_imported: number;
   items_updated: number;
   items_failed: number;
   error_message: string | null;
+  duration_ms?: number;
+  triggered_by?: string;
   started_at: string;
   completed_at: string | null;
 }

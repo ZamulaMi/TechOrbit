@@ -57,15 +57,102 @@ export interface Source {
   name: string;
   base_url: string;
   feed_url?: string;
-  parser_type: 'rss' | 'html' | 'api';
-  scrape_config?: string;
-  sync_interval_min: number;
-  sync_interval_minutes?: number;
-  last_sync_at?: string;
-  last_synced_at?: string;
-  enabled?: boolean;
-  is_active?: boolean;
-  sync_enabled?: boolean;
+  sitemap_url?: string;
+  enabled: boolean;
+  status: 'active' | 'paused' | 'error' | 'syncing';
+  description?: string;
+  language: string;
+  parser_type: 'generic_rss' | 'rss' | 'sitemap' | 'generic_html' | 'html_scraper' | 'wylsa_custom' | 'custom' | string;
+  parser_config?: string | Record<string, any>;
+  article_url_patterns?: string;
+  excluded_url_patterns?: string;
+  allowed_categories?: string;
+  category_mapping?: string | Record<string, string>;
+  default_category_id?: string;
+  max_pages_per_sync?: number;
+  max_articles_per_sync?: number;
+  request_delay_ms?: number;
+  retry_count?: number;
+  min_content_length?: number;
+  max_content_length?: number;
+  user_agent?: string;
+  headers_json?: string;
+  sync_enabled: boolean;
+  sync_interval_minutes: number;
+  last_sync_at?: string | null;
+  next_sync_at?: string | null;
+  last_success_at?: string | null;
+  last_error_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  total_articles?: number;
+  total_updates?: number;
+  total_errors?: number;
+}
+
+export interface SyncLog {
+  id: string;
+  sync_job_id: string;
+  source_id: string;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+  details?: string | null;
+  created_at: string;
+}
+
+export interface DiagnosticResult {
+  url: string;
+  timestamp: string;
+  security: {
+    safe: boolean;
+    reason?: string;
+  };
+  http: {
+    reachable: boolean;
+    status?: number;
+    statusText?: string;
+    responseTimeMs?: number;
+    contentType?: string;
+    server?: string;
+    contentLength?: number;
+  };
+  robotsTxt: {
+    found: boolean;
+    url: string;
+    allowedForBot: boolean;
+    sitemaps: string[];
+    rawExcerpt?: string;
+  };
+  feeds: {
+    rssDetected: boolean;
+    rssUrls: string[];
+    sitemapsDetected: boolean;
+    sitemapUrls: string[];
+  };
+  discoveredUrls: string[];
+  sampleArticle?: {
+    externalId: string;
+    url: string;
+    title: string;
+    author: string;
+    publishedAt: string;
+    rawText: string;
+    excerpt: string;
+    featuredImageUrl?: string;
+    categories: string[];
+    blocks: Array<{
+      type: string;
+      level?: number;
+      text?: string;
+      url?: string;
+      alt?: string;
+      caption?: string;
+      items?: string[];
+      ordered?: boolean;
+    }>;
+  };
+  blocksCount?: number;
+  error?: string;
 }
 
 export interface Article {

@@ -15,6 +15,8 @@ import {
   NotificationItem,
   AuditLog,
   SyncJob,
+  SyncLog,
+  DiagnosticResult,
   User,
   Language
 } from '../types.ts';
@@ -166,6 +168,7 @@ export const api = {
 
     // Sources
     getSources: () => fetchJson<Source[]>('/api/admin/sources'),
+    getSource: (id: string) => fetchJson<Source>(`/api/admin/sources/${id}`),
     createSource: (data: Partial<Source>) =>
       fetchJson<Source>('/api/admin/sources', {
         method: 'POST',
@@ -176,23 +179,33 @@ export const api = {
         method: 'PUT',
         body: JSON.stringify(data)
       }),
+    togglePauseSource: (id: string) =>
+      fetchJson<Source>(`/api/admin/sources/${id}/pause`, {
+        method: 'POST'
+      }),
     deleteSource: (id: string) =>
       fetchJson<{ success: boolean }>(`/api/admin/sources/${id}`, {
         method: 'DELETE'
       }),
-    testSource: (url: string) =>
-      fetchJson<{ success: boolean; status?: number; title?: string; error?: string }>('/api/admin/sources/test', {
+    testSource: (url: string, parserType?: string, config?: any) =>
+      fetchJson<DiagnosticResult>('/api/admin/sources/test', {
         method: 'POST',
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ url, parserType, config })
       }),
     triggerSync: (sourceId: string) =>
-      fetchJson<{ success: boolean; job: SyncJob }>('/api/admin/sources/' + sourceId + '/sync', {
+      fetchJson<any>('/api/admin/sources/' + sourceId + '/sync', {
         method: 'POST'
       }),
     getSyncJobs: (sourceId?: string) => {
       const url = sourceId ? `/api/admin/sources/sync-jobs?sourceId=${sourceId}` : '/api/admin/sources/sync-jobs';
       return fetchJson<SyncJob[]>(url);
     },
+    getSourceLogs: (sourceId: string, jobId?: string) => {
+      const url = `/api/admin/sources/${sourceId}/logs${jobId ? '?jobId=' + jobId : ''}`;
+      return fetchJson<SyncLog[]>(url);
+    },
+    getSourceArticles: (sourceId: string) =>
+      fetchJson<Article[]>(`/api/admin/sources/${sourceId}/articles`),
 
     // Taxonomy
     getCategories: () => fetchJson<Category[]>('/api/admin/categories'),

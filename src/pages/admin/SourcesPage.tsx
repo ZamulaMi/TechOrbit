@@ -1,7 +1,11 @@
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect } from 'react';
 import { AdminLayout } from '../../components/layout/AdminLayout.tsx';
 import { api } from '../../api/client.ts';
 import { Source, SyncJob } from '../../types.ts';
+import { SourceModal } from './sources/SourceModal.tsx';
+import { SourceDiagnosticModal } from './sources/SourceDiagnosticModal.tsx';
+import { SourceLogsModal } from './sources/SourceLogsModal.tsx';
+import { SourceArticlesModal } from './sources/SourceArticlesModal.tsx';
 import {
   Radio,
   Plus,
@@ -13,7 +17,14 @@ import {
   RefreshCw,
   Search,
   Trash2,
-  Clock
+  Clock,
+  Pause,
+  Edit2,
+  FileText,
+  Terminal,
+  Activity,
+  Layers,
+  Database
 } from 'lucide-react';
 
 export function SourcesPage() {
@@ -21,20 +32,23 @@ export function SourcesPage() {
   const [syncJobs, setSyncJobs] = useState<SyncJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [parserFilter, setParserFilter] = useState('all');
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Test URL state
-  const [testUrl, setTestUrl] = useState('https://wylsa.com/feed/');
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; status?: number; title?: string; error?: string } | null>(null);
+  // Modals state
+  const [modalSource, setModalSource] = useState<Source | null>(null);
+  const [showSourceModal, setShowSourceModal] = useState(false);
 
-  // Add source modal state
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [name, setName] = useState('');
-  const [baseUrl, setBaseUrl] = useState('');
-  const [feedUrl, setFeedUrl] = useState('');
-  const [parserType, setParserType] = useState<'rss' | 'html'>('rss');
-  const [syncInterval, setSyncInterval] = useState(60);
-  const [message, setMessage] = useState('');
+  const [diagnosticUrl, setDiagnosticUrl] = useState('');
+  const [diagnosticParser, setDiagnosticParser] = useState('generic_rss');
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
+
+  const [logSource, setLogSource] = useState<Source | null>(null);
+  const [showLogsModal, setShowLogsModal] = useState(false);
+
+  const [articleSource, setArticleSource] = useState<Source | null>(null);
+  const [showArticlesModal, setShowArticlesModal] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -56,249 +70,515 @@ export function SourcesPage() {
     loadData();
   }, []);
 
-  const handleTestUrl = async (e: FormEvent) => {
-    e.preventDefault();
-    setTesting(true);
-    setTestResult(null);
+  const handleSaveSource = async (data: Partial<Source>) => {
+    if (modalSource) {
+      await api.admin.updateSource(modalSource.id, data);
+      setMessage({ type: 'success', text: `Джерело "${data.name}" успішно оновлено.` });
+    } else {
+      await api.admin.createSource(data);
+      setMessage({ type: 'success', text: `Джерело "${data.name}" успішно додано.` });
+    }
+    await loadData();
+  };
+
+  const handleTogglePause = async (source: Source) => {
     try {
-      const res = await api.admin.testSource(testUrl);
-      setTestResult(res);
+      const updated = await api.admin.togglePauseSource(source.id);
+      setMessage({
+        type: 'success',
+        text: `Синхронізацію джерела "${source.name}" ${updated.sync_enabled ? 'відновлено (Active)' : 'призупинено (Paused)'}.`
+      });
+      await loadData();
     } catch (err: any) {
-      setTestResult({ success: false, error: err.message });
-    } finally {
-      setTesting(false);
+      setMessage({ type: 'error', text: err.message || 'Помилка зміни статусу' });
     }
   };
 
-  const handleTriggerSync = async (sourceId: string, sourceName: string) => {
-    setSyncingId(sourceId);
-    setMessage('');
+  const handleTriggerSync = async (source: Source) => {
+    setSyncingId(source.id);
+    setMessage(null);
     try {
-      const res = await api.admin.triggerSync(sourceId);
-      setMessage(
-        `Синхронізацію джерела "${sourceName}" завершено: імпортовано ${res.job.items_imported}, оновлено ${res.job.items_updated}`
-      );
+      const res = await api.admin.triggerSync(source.id);
+      setMessage({
+        type: 'success',
+        text: `Синхронізація "${source.name}" завершена: виявлено ${res.discovered}, імпортовано ${res.imported} нових статей (у чергу PENDING_REVIEW), оновлено ${res.updated} (UPDATE_PENDING).`
+      });
       await loadData();
     } catch (err: any) {
-      alert(err.message || 'Помилка синхронізації джерела');
+      setMessage({ type: 'error', text: err.message || 'Помилка виконання синхронізації' });
     } finally {
       setSyncingId(null);
     }
   };
 
-  const handleAddSource = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleDeleteSource = async (source: Source) => {
+    if (!window.confirm(`Видалити джерело "${source.name}" та всі пов'язані налаштування краулінгу?`)) return;
     try {
-      await api.admin.createSource({
-        name,
-        base_url: baseUrl,
-        feed_url: feedUrl || baseUrl,
-        parser_type: parserType,
-        sync_interval_min: syncInterval,
-        enabled: true,
-        sync_enabled: true
-      });
-      setShowAddModal(false);
-      setName('');
-      setBaseUrl('');
-      setFeedUrl('');
-      setMessage('Джерело контенту додано успішно!');
+      await api.admin.deleteSource(source.id);
+      setMessage({ type: 'success', text: `Джерело "${source.name}" видалено.` });
       await loadData();
     } catch (err: any) {
-      alert(err.message || 'Помилка створення джерела');
+      setMessage({ type: 'error', text: err.message || 'Помилка видалення' });
     }
   };
 
-  const handleDeleteSource = async (id: string, sourceName: string) => {
-    if (!window.confirm(`Видалити джерело "${sourceName}"?`)) return;
-    try {
-      await api.admin.deleteSource(id);
-      await loadData();
-    } catch (err: any) {
-      alert(err.message || 'Помилка видалення');
-    }
+  const openDiagnostic = (sourceUrl?: string, pType?: string) => {
+    setDiagnosticUrl(sourceUrl || 'https://wylsa.com/feed/');
+    setDiagnosticParser(pType || 'wylsa_custom');
+    setShowDiagnosticModal(true);
   };
+
+  // Filter sources
+  const filteredSources = sources.filter(s => {
+    const matchesSearch =
+      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.base_url.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.feed_url && s.feed_url.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    const matchesParser = parserFilter === 'all' || s.parser_type === parserFilter;
+    return matchesSearch && matchesParser;
+  });
+
+  // Calculate high-level stats
+  const totalArticlesCount = sources.reduce((acc, s) => acc + (s.total_articles || 0), 0);
+  const totalUpdatesCount = sources.reduce((acc, s) => acc + (s.total_updates || 0), 0);
+  const activeSourcesCount = sources.filter(s => s.status === 'active' && s.sync_enabled).length;
 
   return (
     <AdminLayout
-      title="Джерела контенту та парсинг"
-      subtitle="Управління зовнішніми RSS/HTML джерелами, частотою опитування та безпекою SSRF"
+      title="Джерела контенту (Sources & Ingestion Engine)"
+      subtitle="Багатоджерельна агрегація: RSS, Sitemap, HTML Scraper, Wylsa Custom Parser та SSRF-захист"
       onRefresh={loadData}
       refreshing={loading}
     >
       <div className="space-y-6">
+        {/* Banner message */}
         {message && (
-          <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 flex items-center justify-between">
-            <span>{message}</span>
-            <button type="button" onClick={() => setMessage('')} className="font-bold hover:underline">
+          <div
+            className={`p-3.5 rounded-xl border text-xs flex items-center justify-between transition-all ${
+              message.type === 'success'
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {message.type === 'success' ? (
+                <CheckCircle className="w-4 h-4 shrink-0 text-emerald-400" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+              )}
+              <span className="font-medium">{message.text}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMessage(null)}
+              className="text-slate-400 hover:text-white text-xs font-bold px-2 py-0.5"
+            >
               ✕
             </button>
           </div>
         )}
 
-        {/* SSRF & Connection Diagnostic Tool */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
-              Діагностика першоджерела (SSRF Guard & Connectivity Test)
-            </h3>
-          </div>
-          <p className="text-xs text-slate-400">
-            Перевірте доступність зовнішнього URL. Вбудований SSRF-фільтр автоматично блокує приватні IP-адреси (127.0.0.1, 10.0.0.0/8, 192.168.0.0/16) та хмарні метадані.
-          </p>
-
-          <form onSubmit={handleTestUrl} className="flex flex-col sm:flex-row gap-2 pt-1">
-            <input
-              type="url"
-              value={testUrl}
-              onChange={e => setTestUrl(e.target.value)}
-              placeholder="https://example.com/feed/"
-              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-              required
-            />
-            <button
-              type="submit"
-              disabled={testing}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition-colors border border-slate-700 flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {testing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 text-emerald-400" />}
-              <span>{testing ? 'Перевірка зʼєднання...' : 'Тестувати джерело'}</span>
-            </button>
-          </form>
-
-          {testResult && (
-            <div
-              className={`p-3 rounded-xl text-xs flex items-start gap-2 ${
-                testResult.success
-                  ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
-                  : 'bg-rose-500/10 border border-rose-500/30 text-rose-300'
-              }`}
-            >
-              {testResult.success ? (
-                <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              ) : (
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-              )}
-              <div className="space-y-0.5">
-                <p className="font-bold">
-                  {testResult.success ? 'Джерело успішно відповідає!' : 'Помилка доступу до джерела:'}
-                </p>
-                {testResult.status && <p>HTTP Status Code: {testResult.status}</p>}
-                {testResult.title && <p>Витягнутий заголовок: "{testResult.title}"</p>}
-                {testResult.error && <p className="font-mono text-[11px]">{testResult.error}</p>}
+        {/* METRICS CARDS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+              <Radio className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block">
+                Підключені джерела
+              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xl font-bold text-white">{sources.length}</span>
+                <span className="text-xs text-emerald-400 font-medium">({activeSourcesCount} активних)</span>
               </div>
             </div>
-          )}
-        </div>
-
-        {/* SOURCES LIST */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Radio className="w-4 h-4 text-cyan-400" />
-              <span>Налаштовані першоджерела ({sources.length})</span>
-            </h3>
-            <button
-              type="button"
-              onClick={() => setShowAddModal(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Додати джерело</span>
-            </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {sources.map(s => (
-              <div
-                key={s.id}
-                className="bg-slate-950 border border-slate-800/80 rounded-xl p-4 flex flex-col justify-between space-y-3"
-              >
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-white text-sm">{s.name}</span>
-                    <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-900 text-emerald-400 border border-slate-800">
-                      {s.parser_type}
-                    </span>
-                  </div>
-
-                  <a
-                    href={s.base_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs text-slate-400 hover:text-emerald-400 transition-colors flex items-center gap-1 truncate"
-                  >
-                    <span>{s.base_url}</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-
-                  <div className="text-[11px] text-slate-500 space-y-0.5 pt-1">
-                    <p>Feed URL: {s.feed_url}</p>
-                    <p>Інтервал опитування: кожні {s.sync_interval_minutes} хв</p>
-                    {s.last_synced_at && (
-                      <p>Остання синхронізація: {new Date(s.last_synced_at).toLocaleString()}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                  <button
-                    type="button"
-                    onClick={() => handleTriggerSync(s.id, s.name)}
-                    disabled={syncingId === s.id}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-semibold transition-colors disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${syncingId === s.id ? 'animate-spin' : ''}`} />
-                    <span>{syncingId === s.id ? 'Парсинг...' : 'Синхронізувати зараз'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteSource(s.id, s.name)}
-                    className="p-1.5 rounded text-slate-500 hover:text-rose-400 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block">
+                Імпортовано в чергу
+              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xl font-bold text-white">{totalArticlesCount}</span>
+                <span className="text-[11px] text-slate-400">матеріалів</span>
               </div>
-            ))}
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
+              <Activity className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block">
+                Зафіксовано змін
+              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xl font-bold text-white">{totalUpdatesCount}</span>
+                <span className="text-[11px] text-purple-400">update_pending</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block">
+                SSRF Guard фільтр
+              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-sm font-bold text-emerald-400">ENFORCED</span>
+                <span className="text-[11px] text-slate-400">(0.0.0.0, 127.0.0.1 blocked)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* SOURCES TABLE & ACTIONS */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+          {/* Action Header */}
+          <div className="p-4 border-b border-slate-800 bg-slate-950/40 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Пошук джерел..."
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <select
+                value={parserFilter}
+                onChange={e => setParserFilter(e.target.value)}
+                className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+              >
+                <option value="all">Усі парсери</option>
+                <option value="wylsa_custom">Wylsa Custom</option>
+                <option value="generic_rss">Generic RSS</option>
+                <option value="generic_html">HTML Scraper</option>
+                <option value="sitemap">Sitemap</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <button
+                type="button"
+                onClick={() => openDiagnostic()}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors border border-slate-700 flex items-center gap-1.5"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Тестувати джерело (SSRF)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setModalSource(null);
+                  setShowSourceModal(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Додати джерело</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-300">
+              <thead className="border-b border-slate-800 bg-slate-950/60 text-[11px] text-slate-400 uppercase tracking-wider">
+                <tr>
+                  <th className="py-3 px-4">Name</th>
+                  <th className="py-3 px-4">URL</th>
+                  <th className="py-3 px-3 text-center">Status</th>
+                  <th className="py-3 px-3 text-center">Enabled</th>
+                  <th className="py-3 px-3">Parser</th>
+                  <th className="py-3 px-3">Last Sync</th>
+                  <th className="py-3 px-3">Next Sync</th>
+                  <th className="py-3 px-2 text-center">New</th>
+                  <th className="py-3 px-2 text-center">Updates</th>
+                  <th className="py-3 px-2 text-center">Errors</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {filteredSources.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="py-12 text-center text-slate-500">
+                      Не знайдено підключених джерел за вашим запитом.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredSources.map(s => {
+                    const isSyncing = syncingId === s.id;
+                    return (
+                      <tr key={s.id} className="hover:bg-slate-800/30 transition-colors">
+                        {/* 1. Name */}
+                        <td className="py-3 px-4 font-bold text-white whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <span>{s.name}</span>
+                          </div>
+                        </td>
+
+                        {/* 2. URL */}
+                        <td className="py-3 px-4 max-w-[180px]">
+                          <div className="space-y-0.5 truncate">
+                            <a
+                              href={s.base_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-slate-300 hover:text-emerald-400 transition-colors inline-flex items-center gap-1 truncate font-mono text-[11px]"
+                            >
+                              <span>{s.base_url.replace(/^https?:\/\//, '')}</span>
+                              <ExternalLink className="w-3 h-3 shrink-0" />
+                            </a>
+                            {s.feed_url && (
+                              <span className="block text-[10px] text-slate-500 font-mono truncate">
+                                Feed: {s.feed_url.replace(/^https?:\/\//, '')}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 3. Status */}
+                        <td className="py-3 px-3 text-center">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider inline-block ${
+                              s.status === 'active'
+                                ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/60'
+                                : s.status === 'syncing'
+                                ? 'bg-cyan-950 text-cyan-400 border border-cyan-800/60 animate-pulse'
+                                : s.status === 'paused'
+                                ? 'bg-slate-800 text-slate-400 border border-slate-700'
+                                : 'bg-rose-950 text-rose-400 border border-rose-800/60'
+                            }`}
+                          >
+                            {s.status}
+                          </span>
+                        </td>
+
+                        {/* 4. Enabled */}
+                        <td className="py-3 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePause(s)}
+                            className={`w-8 h-4 rounded-full transition-colors relative inline-flex items-center p-0.5 ${
+                              s.sync_enabled ? 'bg-emerald-600' : 'bg-slate-700'
+                            }`}
+                            title={s.sync_enabled ? 'Синхронізація увімкнена' : 'Синхронізація на паузі'}
+                          >
+                            <span
+                              className={`w-3 h-3 rounded-full bg-white transition-transform ${
+                                s.sync_enabled ? 'translate-x-4' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </td>
+
+                        {/* 5. Parser */}
+                        <td className="py-3 px-3">
+                          <span className="px-2 py-0.5 rounded bg-slate-950 text-slate-300 font-mono text-[10px] border border-slate-800">
+                            {s.parser_type === 'wylsa_custom'
+                              ? 'Wylsa Parser'
+                              : s.parser_type === 'generic_rss'
+                              ? 'RSS / Atom'
+                              : s.parser_type === 'sitemap'
+                              ? 'Sitemap XML'
+                              : 'HTML Scraper'}
+                          </span>
+                        </td>
+
+                        {/* 6. Last Sync */}
+                        <td className="py-3 px-3 text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                          {s.last_sync_at ? new Date(s.last_sync_at).toLocaleTimeString() : '—'}
+                        </td>
+
+                        {/* 7. Next Sync */}
+                        <td className="py-3 px-3 text-slate-500 font-mono text-[11px] whitespace-nowrap">
+                          {s.next_sync_at && s.sync_enabled ? new Date(s.next_sync_at).toLocaleTimeString() : 'Paused'}
+                        </td>
+
+                        {/* 8. New Articles */}
+                        <td className="py-3 px-2 text-center font-bold text-emerald-400 font-mono">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setArticleSource(s);
+                              setShowArticlesModal(true);
+                            }}
+                            className="hover:underline"
+                            title="Переглянути імпортовані матеріали"
+                          >
+                            {s.total_articles || 0}
+                          </button>
+                        </td>
+
+                        {/* 9. Updates */}
+                        <td className="py-3 px-2 text-center font-bold text-purple-400 font-mono">
+                          {s.total_updates || 0}
+                        </td>
+
+                        {/* 10. Errors */}
+                        <td className="py-3 px-2 text-center font-bold text-rose-400 font-mono">
+                          {s.total_errors || 0}
+                        </td>
+
+                        {/* 11. Actions */}
+                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* Sync Now */}
+                            <button
+                              type="button"
+                              onClick={() => handleTriggerSync(s)}
+                              disabled={isSyncing}
+                              className="p-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition-colors disabled:opacity-50"
+                              title="Sync Now (Запустити синхронізацію)"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                            </button>
+
+                            {/* Pause / Resume */}
+                            <button
+                              type="button"
+                              onClick={() => handleTogglePause(s)}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors border border-slate-700"
+                              title={s.sync_enabled ? 'Pause' : 'Resume'}
+                            >
+                              {s.sync_enabled ? <Pause className="w-3.5 h-3.5 text-amber-400" /> : <Play className="w-3.5 h-3.5 text-emerald-400" />}
+                            </button>
+
+                            {/* Test Source */}
+                            <button
+                              type="button"
+                              onClick={() => openDiagnostic(s.feed_url || s.base_url, s.parser_type)}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors border border-slate-700"
+                              title="Test Source (Діагностика першоджерела)"
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+                            </button>
+
+                            {/* View Logs */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLogSource(s);
+                                setShowLogsModal(true);
+                              }}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors border border-slate-700"
+                              title="View Logs (Журнал краулінгу)"
+                            >
+                              <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+                            </button>
+
+                            {/* View Articles */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setArticleSource(s);
+                                setShowArticlesModal(true);
+                              }}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors border border-slate-700"
+                              title="View Articles (Імпортовані статті)"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-indigo-400" />
+                            </button>
+
+                            {/* Edit */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setModalSource(s);
+                                setShowSourceModal(true);
+                              }}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors border border-slate-700"
+                              title="Edit (Редагувати параметри)"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Delete */}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSource(s)}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                              title="Delete (Видалити джерело)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 
         {/* SYNC HISTORY JOBS */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Clock className="w-4 h-4 text-emerald-400" />
-            <span>Історія сесій парсингу (Sync Logs)</span>
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Clock className="w-4 h-4 text-emerald-400" />
+              <span>Останні сесії синхронізації (Sync History)</span>
+            </h3>
+            <span className="text-xs text-slate-500 font-mono">Автоматичне оновлення</span>
+          </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-300">
-              <thead className="border-b border-slate-800 text-[11px] text-slate-400 uppercase">
+              <thead className="border-b border-slate-800 text-[11px] text-slate-400 uppercase font-mono">
                 <tr>
                   <th className="pb-2">ID Сесії</th>
+                  <th className="pb-2">Джерело</th>
                   <th className="pb-2">Статус</th>
-                  <th className="pb-2">Знайдено</th>
-                  <th className="pb-2">Імпортовано</th>
-                  <th className="pb-2">Оновлено</th>
-                  <th className="pb-2">Час виконання</th>
+                  <th className="pb-2 text-center">Виявлено</th>
+                  <th className="pb-2 text-center">Нові</th>
+                  <th className="pb-2 text-center">Оновлені</th>
+                  <th className="pb-2 text-center">Помилки</th>
+                  <th className="pb-2">Тривалість</th>
+                  <th className="pb-2 text-right">Час запуску</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
-                {syncJobs.map(job => (
-                  <tr key={job.id} className="hover:bg-slate-800/30">
-                    <td className="py-2.5 pr-2 text-slate-400">{job.id}</td>
-                    <td className="py-2.5 pr-2">
-                      <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-sans text-[10px] font-bold">
+                {syncJobs.slice(0, 10).map(job => (
+                  <tr key={job.id} className="hover:bg-slate-800/30 transition-colors">
+                    <td className="py-2.5 text-slate-400">{job.id}</td>
+                    <td className="py-2.5 text-slate-200 font-sans font-medium">{job.source_name || job.source_id}</td>
+                    <td className="py-2.5">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-sans font-bold uppercase ${
+                          job.status === 'completed'
+                            ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/60'
+                            : job.status === 'running'
+                            ? 'bg-cyan-950 text-cyan-400 border border-cyan-800/60 animate-pulse'
+                            : 'bg-rose-950 text-rose-400 border border-rose-800/60'
+                        }`}
+                      >
                         {job.status}
                       </span>
                     </td>
-                    <td className="py-2.5 pr-2 text-slate-300">{job.items_found}</td>
-                    <td className="py-2.5 pr-2 text-emerald-400 font-bold">{job.items_imported}</td>
-                    <td className="py-2.5 pr-2 text-amber-400">{job.items_updated}</td>
-                    <td className="py-2.5 text-slate-500 font-sans text-xs">
-                      {new Date(job.created_at).toLocaleString()}
+                    <td className="py-2.5 text-center text-slate-300">{job.items_found}</td>
+                    <td className="py-2.5 text-center text-emerald-400 font-bold">{job.items_imported}</td>
+                    <td className="py-2.5 text-center text-purple-400 font-bold">{job.items_updated}</td>
+                    <td className="py-2.5 text-center text-rose-400">{job.items_failed}</td>
+                    <td className="py-2.5 text-slate-400">{job.duration_ms ? `${job.duration_ms}ms` : '—'}</td>
+                    <td className="py-2.5 text-right text-slate-500 font-sans text-xs">
+                      {new Date(job.started_at || (job as any).created_at).toLocaleString()}
                     </td>
                   </tr>
                 ))}
@@ -307,92 +587,32 @@ export function SourcesPage() {
           </div>
         </div>
 
-        {/* Add Source Modal */}
-        {showAddModal && (
-          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
-              <h3 className="font-bold text-white text-sm">Додати нове джерело</h3>
+        {/* MODALS */}
+        <SourceModal
+          source={modalSource}
+          isOpen={showSourceModal}
+          onClose={() => setShowSourceModal(false)}
+          onSave={handleSaveSource}
+        />
 
-              <form onSubmit={handleAddSource} className="space-y-3">
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Назва видання / сайту</label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    placeholder="Wylsa, The Verge, Engadget..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                    required
-                  />
-                </div>
+        <SourceDiagnosticModal
+          initialUrl={diagnosticUrl}
+          initialParserType={diagnosticParser}
+          isOpen={showDiagnosticModal}
+          onClose={() => setShowDiagnosticModal(false)}
+        />
 
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Головна адреса сайту (Base URL)</label>
-                  <input
-                    type="url"
-                    value={baseUrl}
-                    onChange={e => setBaseUrl(e.target.value)}
-                    placeholder="https://wylsa.com"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                    required
-                  />
-                </div>
+        <SourceLogsModal
+          source={logSource}
+          isOpen={showLogsModal}
+          onClose={() => setShowLogsModal(false)}
+        />
 
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Feed URL (RSS або Sitemap)</label>
-                  <input
-                    type="url"
-                    value={feedUrl}
-                    onChange={e => setFeedUrl(e.target.value)}
-                    placeholder="https://wylsa.com/feed/"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">Тип парсера</label>
-                    <select
-                      value={parserType}
-                      onChange={e => setParserType(e.target.value as any)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                    >
-                      <option value="rss">RSS / Atom</option>
-                      <option value="html">HTML Scraper</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">Інтервал (хв)</label>
-                    <input
-                      type="number"
-                      value={syncInterval}
-                      onChange={e => setSyncInterval(Number(e.target.value))}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddModal(false)}
-                    className="px-3 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-medium"
-                  >
-                    Скасувати
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold"
-                  >
-                    Зберегти джерело
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+        <SourceArticlesModal
+          source={articleSource}
+          isOpen={showArticlesModal}
+          onClose={() => setShowArticlesModal(false)}
+        />
       </div>
     </AdminLayout>
   );
