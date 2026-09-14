@@ -1,0 +1,6 @@
+{
+  "name": "TechOrbit",
+  "description": "Production-ready technology media platform with content aggregation, multi-language publishing, moderation CMS, and version control.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
