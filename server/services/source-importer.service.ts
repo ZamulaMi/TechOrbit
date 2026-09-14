@@ -390,7 +390,7 @@ export class SourceImporter {
             sourceArticleId: existingSourceArticle.id,
             newTitle: articleData.title,
             newContent: articleData.rawHtml,
-            sourceAuthor: articleData.author
+            newAuthor: articleData.author
           });
 
           if (existingSourceArticle.article_id) {

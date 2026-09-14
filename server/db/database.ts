@@ -409,6 +409,41 @@ export function initDatabase() {
   migrateColumn('sync_jobs', 'duration_ms INTEGER DEFAULT 0');
   migrateColumn('sync_jobs', 'triggered_by TEXT DEFAULT "scheduler"');
 
+  // Dynamic migrations for Versioning, Snapshots, and Change Events
+  migrateColumn('change_events', 'source_id TEXT');
+  migrateColumn('change_events', 'old_version_id TEXT');
+  migrateColumn('change_events', 'new_snapshot_id TEXT');
+  migrateColumn('change_events', 'change_type TEXT DEFAULT "CONTENT_CHANGED"');
+  migrateColumn('change_events', 'severity TEXT DEFAULT "medium"');
+  migrateColumn('change_events', 'summary TEXT');
+  migrateColumn('change_events', 'diff TEXT DEFAULT "{}"');
+  migrateColumn('change_events', 'reviewed_at TEXT');
+  migrateColumn('change_events', 'reviewed_by TEXT');
+  migrateColumn('change_events', 'review_comment TEXT');
+
+  migrateColumn('source_snapshots', 'source_id TEXT');
+  migrateColumn('source_snapshots', 'article_id TEXT');
+  migrateColumn('source_snapshots', 'subtitle TEXT');
+  migrateColumn('source_snapshots', 'excerpt TEXT');
+  migrateColumn('source_snapshots', 'author TEXT');
+  migrateColumn('source_snapshots', 'category TEXT');
+  migrateColumn('source_snapshots', 'tags_json TEXT DEFAULT "[]"');
+  migrateColumn('source_snapshots', 'featured_image_url TEXT');
+  migrateColumn('source_snapshots', 'gallery_json TEXT DEFAULT "[]"');
+  migrateColumn('source_snapshots', 'links_json TEXT DEFAULT "[]"');
+  migrateColumn('source_snapshots', 'structured_blocks_json TEXT DEFAULT "[]"');
+  migrateColumn('source_snapshots', 'published_at TEXT');
+  migrateColumn('source_snapshots', 'updated_at TEXT');
+
+  migrateColumn('article_versions', 'subtitle TEXT');
+  migrateColumn('article_versions', 'category_id TEXT');
+  migrateColumn('article_versions', 'author_id TEXT');
+  migrateColumn('article_versions', 'featured_image_url TEXT');
+  migrateColumn('article_versions', 'structured_blocks_json TEXT DEFAULT "[]"');
+
+  migrateColumn('articles', 'translation_status TEXT DEFAULT "NOT_STARTED"');
+  migrateColumn('articles', 'source_status TEXT DEFAULT "active"');
+
   seedData();
 }
 

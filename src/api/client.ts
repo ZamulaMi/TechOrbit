@@ -129,7 +129,24 @@ export const api = {
       }),
 
     // Moderation
-    getReviewQueue: () => fetchJson<Article[]>('/api/admin/review-queue'),
+    getReviewQueue: (filters?: { sourceId?: string; categoryId?: string; search?: string }) => {
+      const q = new URLSearchParams();
+      if (filters?.sourceId) q.set('sourceId', filters.sourceId);
+      if (filters?.categoryId) q.set('categoryId', filters.categoryId);
+      if (filters?.search) q.set('search', filters.search);
+      return fetchJson<{
+        newArticles: Article[];
+        updatedArticles: Article[];
+        translationsPending: Article[];
+        publishingReady: Article[];
+        counts: {
+          newArticles: number;
+          updatedArticles: number;
+          translationsPending: number;
+          publishingReady: number;
+        };
+      }>(`/api/admin/review-queue?${q.toString()}`);
+    },
     approveArticle: (id: string) => fetchJson<Article>(`/api/admin/articles/${id}/approve`, { method: 'POST' }),
     publishArticle: (id: string) => fetchJson<Article>(`/api/admin/articles/${id}/publish`, { method: 'POST' }),
     rejectArticle: (id: string, reason?: string) =>
@@ -137,13 +154,27 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ reason })
       }),
+    updateTranslationStatus: (id: string, status: string) =>
+      fetchJson<{ success: boolean }>(`/api/admin/articles/${id}/translation-status`, {
+        method: 'POST',
+        body: JSON.stringify({ status })
+      }),
 
     // Versions
     getVersions: (articleId: string) => fetchJson<ArticleVersion[]>(`/api/admin/articles/${articleId}/versions`),
     rollbackVersion: (articleId: string, versionId: string) =>
-      fetchJson<{ success: boolean; article: Article }>(`/api/admin/articles/${articleId}/versions/${versionId}/rollback`, {
-        method: 'POST'
-      }),
+      fetchJson<{ success: boolean; message: string; newVersionNumber?: number; article: Article }>(
+        `/api/admin/articles/${articleId}/versions/${versionId}/rollback`,
+        { method: 'POST' }
+      ),
+    compareVersions: (version1Id: string, version2Id: string) =>
+      fetchJson<{ version1: ArticleVersion; version2: ArticleVersion; diff: any; summary: string }>(
+        '/api/admin/versions/compare',
+        {
+          method: 'POST',
+          body: JSON.stringify({ version1Id, version2Id })
+        }
+      ),
 
     // Translations
     getTranslations: (articleId: string) => fetchJson<ArticleTranslation[]>(`/api/admin/articles/${articleId}/translations`),
@@ -159,11 +190,44 @@ export const api = {
       }),
 
     // Changes & Diffs
-    getChanges: () => fetchJson<ChangeEvent[]>('/api/admin/changes'),
-    resolveChange: (id: string, action: 'merged' | 'dismissed') =>
-      fetchJson<{ success: boolean }>(`/api/admin/changes/${id}/resolve`, {
+    getChanges: (filters?: { status?: string; sourceId?: string; severity?: string; changeType?: string }) => {
+      const q = new URLSearchParams();
+      if (filters?.status) q.set('status', filters.status);
+      if (filters?.sourceId) q.set('sourceId', filters.sourceId);
+      if (filters?.severity) q.set('severity', filters.severity);
+      if (filters?.changeType) q.set('changeType', filters.changeType);
+      return fetchJson<ChangeEvent[]>(`/api/admin/changes?${q.toString()}`);
+    },
+    getChange: (id: string) =>
+      fetchJson<{
+        changeEvent: ChangeEvent;
+        oldSnapshot: any;
+        newSnapshot: any;
+        currentArticle: Article | null;
+      }>(`/api/admin/changes/${id}`),
+    resolveChange: (
+      id: string,
+      params:
+        | 'merged'
+        | 'dismissed'
+        | {
+            action: 'accept_all' | 'reject_all' | 'accept_selected' | 'reject_selected';
+            acceptedFields?: string[];
+            acceptedBlockIndices?: number[];
+            comment?: string;
+            deletedAction?: 'keep_published' | 'unpublish' | 'archive';
+          }
+    ) => {
+      const body = typeof params === 'string' ? { action: params } : params;
+      return fetchJson<{ success: boolean; message: string }>(`/api/admin/changes/${id}/resolve`, {
         method: 'POST',
-        body: JSON.stringify({ action })
+        body: JSON.stringify(body)
+      });
+    },
+    simulateChange: (type: string, articleId: string) =>
+      fetchJson<{ success: boolean; result: any }>('/api/admin/test/simulate-change', {
+        method: 'POST',
+        body: JSON.stringify({ type, articleId })
       }),
 
     // Sources

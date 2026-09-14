@@ -130,7 +130,15 @@ adminRouter.delete('/articles/:id', (req: AuthenticatedRequest, res: Response) =
 // 3. REVIEW QUEUE & MODERATION
 // ----------------------------------------------------
 adminRouter.get('/review-queue', (req: AuthenticatedRequest, res: Response) => {
-  const queue = PublishingService.getReviewQueue();
+  const sourceId = req.query.sourceId as string | undefined;
+  const categoryId = req.query.categoryId as string | undefined;
+  const search = req.query.search as string | undefined;
+
+  const queue = PublishingService.getCategorizedReviewQueue({
+    sourceId,
+    categoryId,
+    search
+  });
   res.json(queue);
 });
 
@@ -153,6 +161,13 @@ adminRouter.post('/articles/:id/reject', (req: AuthenticatedRequest, res: Respon
   res.json(updated);
 });
 
+adminRouter.post('/articles/:id/translation-status', (req: AuthenticatedRequest, res: Response) => {
+  const { status } = req.body;
+  if (!status) return res.status(400).json({ error: 'Status is required' });
+  const ok = PublishingService.updateTranslationStatus(req.params.id, status, req.user!.id);
+  res.json({ success: ok });
+});
+
 // ----------------------------------------------------
 // 4. ARTICLE VERSIONS
 // ----------------------------------------------------
@@ -161,19 +176,26 @@ adminRouter.get('/articles/:id/versions', (req: AuthenticatedRequest, res: Respo
   res.json(versions);
 });
 
+adminRouter.get('/articles/:id/versions/:versionId', (req: AuthenticatedRequest, res: Response) => {
+  const version = ArticleVersionService.getVersionById(req.params.versionId);
+  if (!version) return res.status(404).json({ error: 'Version not found' });
+  res.json(version);
+});
+
 adminRouter.post('/articles/:id/versions/:versionId/rollback', (req: AuthenticatedRequest, res: Response) => {
-  const success = ArticleVersionService.rollbackToVersion(req.params.id, req.params.versionId, req.user!.id);
-  if (!success) return res.status(400).json({ error: 'Rollback failed. Invalid version.' });
+  const result = ArticleVersionService.rollbackToVersion(req.params.id, req.params.versionId, req.user!.id);
+  if (!result.success) return res.status(400).json({ error: result.message });
+  res.json({ ...result, article: ArticleService.getArticleById(req.params.id) });
+});
 
-  AuditService.log({
-    userId: req.user!.id,
-    action: 'ARTICLE_ROLLBACK',
-    entityType: 'article',
-    entityId: req.params.id,
-    newValues: { versionId: req.params.versionId }
-  });
-
-  res.json({ success: true, article: ArticleService.getArticleById(req.params.id) });
+adminRouter.post('/versions/compare', (req: AuthenticatedRequest, res: Response) => {
+  const { version1Id, version2Id } = req.body;
+  if (!version1Id || !version2Id) {
+    return res.status(400).json({ error: 'Both version1Id and version2Id are required' });
+  }
+  const result = ArticleVersionService.compareVersions(version1Id, version2Id);
+  if (!result) return res.status(404).json({ error: 'One or both versions not found' });
+  res.json(result);
 });
 
 // ----------------------------------------------------
@@ -229,6 +251,8 @@ adminRouter.post('/articles/:id/translate-ai', async (req: AuthenticatedRequest,
     reviewedBy: null
   });
 
+  PublishingService.updateTranslationStatus(article.id, 'READY_FOR_REVIEW', req.user!.id);
+
   res.json({ success: true, translation: record });
 });
 
@@ -236,28 +260,136 @@ adminRouter.post('/articles/:id/translate-ai', async (req: AuthenticatedRequest,
 // 6. CHANGES & DIFF TRACKER
 // ----------------------------------------------------
 adminRouter.get('/changes', (req: AuthenticatedRequest, res: Response) => {
-  const changes = ChangeDetectionService.getPendingChanges();
+  const status = req.query.status as string | undefined;
+  const sourceId = req.query.sourceId as string | undefined;
+  const severity = req.query.severity as string | undefined;
+  const changeType = req.query.changeType as string | undefined;
+
+  const changes = ChangeDetectionService.getChanges({
+    status,
+    sourceId,
+    severity,
+    changeType
+  });
   res.json(changes);
 });
 
+adminRouter.get('/changes/:id', (req: AuthenticatedRequest, res: Response) => {
+  const change = ChangeDetectionService.getChangeById(req.params.id);
+  if (!change) return res.status(404).json({ error: 'Change event not found' });
+  res.json(change);
+});
+
 adminRouter.post('/changes/:id/resolve', (req: AuthenticatedRequest, res: Response) => {
-  const action = req.body.action as 'merged' | 'dismissed';
-  if (!action || !['merged', 'dismissed'].includes(action)) {
-    return res.status(400).json({ error: 'Action must be merged or dismissed' });
+  const { action, acceptedFields, acceptedBlockIndices, comment, deletedAction } = req.body;
+
+  let normalizedAction: 'accept_all' | 'reject_all' | 'accept_selected' | 'reject_selected' = 'accept_all';
+  if (action === 'merged' || action === 'accept_all' || action === 'approve') {
+    normalizedAction = 'accept_all';
+  } else if (action === 'dismissed' || action === 'reject_all' || action === 'reject') {
+    normalizedAction = 'reject_all';
+  } else if (action === 'accept_selected') {
+    normalizedAction = 'accept_selected';
+  } else if (action === 'reject_selected') {
+    normalizedAction = 'reject_selected';
   }
 
-  const success = ChangeDetectionService.resolveChange(req.params.id, action);
-  if (!success) return res.status(404).json({ error: 'Change event not found' });
+  try {
+    const result = ChangeDetectionService.resolveChange(req.params.id, {
+      action: normalizedAction,
+      acceptedFields,
+      acceptedBlockIndices,
+      comment,
+      deletedAction,
+      userId: req.user!.id
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
 
-  AuditService.log({
-    userId: req.user!.id,
-    action: 'CHANGE_RESOLVED',
-    entityType: 'change_event',
-    entityId: req.params.id,
-    newValues: { status: action }
-  });
+adminRouter.post('/test/simulate-change', (req: AuthenticatedRequest, res: Response) => {
+  const { type, articleId } = req.body;
+  const article = ArticleService.getArticleById(articleId);
+  if (!article) return res.status(404).json({ error: 'Article not found' });
 
-  res.json({ success: true });
+  const sourceArticle = (article.source_article_id
+    ? db.prepare('SELECT * FROM source_articles WHERE id = ?').get(article.source_article_id)
+    : null) as any;
+
+  const srcArtId = sourceArticle?.id || 'src_art_' + Date.now().toString(36);
+  if (!sourceArticle) {
+    db.prepare(`
+      INSERT INTO source_articles (id, source_id, external_id, source_url, title, raw_html, raw_text, author, published_at, content_hash, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'processed', datetime('now'), datetime('now'))
+    `).run(srcArtId, article.source_id || 'source_wylsa', 'ext_' + Date.now(), article.source_url || 'https://wylsa.com/test', article.title, article.content, article.content, article.source_author || 'Editor', article.published_at, 'hash_' + Date.now());
+
+    db.prepare('UPDATE articles SET source_article_id = ? WHERE id = ?').run(srcArtId, article.id);
+  }
+
+  let result: any = null;
+
+  if (type === 'TITLE_CHANGED') {
+    result = ChangeDetectionService.detectArticleChange({
+      sourceId: article.source_id,
+      sourceArticleId: srcArtId,
+      articleId: article.id,
+      newTitle: article.title + ' [Оновлено: додано офіційні характеристики]',
+      newSubtitle: article.subtitle,
+      newExcerpt: article.excerpt,
+      newContent: article.content,
+      newAuthor: article.source_author,
+      newFeaturedImageUrl: article.featured_image_url
+    });
+  } else if (type === 'CONTENT_CHANGED') {
+    const updatedContent = article.content + '\n<p><strong>UPD (15:00):</strong> Джерело додало розширений коментар представника компанії щодо ціни та дати виходу в Європі.</p>';
+    result = ChangeDetectionService.detectArticleChange({
+      sourceId: article.source_id,
+      sourceArticleId: srcArtId,
+      articleId: article.id,
+      newTitle: article.title,
+      newSubtitle: article.subtitle,
+      newExcerpt: article.excerpt,
+      newContent: updatedContent,
+      newAuthor: article.source_author,
+      newFeaturedImageUrl: article.featured_image_url,
+      newBlocks: [
+        { type: 'paragraph', text: article.excerpt },
+        { type: 'paragraph', text: 'Оновлений блок тексту з новими деталями.' },
+        { type: 'heading', level: 2, text: 'Додаткова інформація' },
+        { type: 'paragraph', text: 'Коментар представника компанії щодо ціни.' }
+      ]
+    });
+  } else if (type === 'IMAGE_CHANGED') {
+    result = ChangeDetectionService.detectArticleChange({
+      sourceId: article.source_id,
+      sourceArticleId: srcArtId,
+      articleId: article.id,
+      newTitle: article.title,
+      newSubtitle: article.subtitle,
+      newExcerpt: article.excerpt,
+      newContent: article.content,
+      newAuthor: article.source_author,
+      newFeaturedImageUrl: 'https://images.unsplash.com/photo-1616469829941-c7200edec809?w=1200&q=80'
+    });
+  } else if (type === 'MULTIPLE_CHANGES') {
+    result = ChangeDetectionService.detectArticleChange({
+      sourceId: article.source_id,
+      sourceArticleId: srcArtId,
+      articleId: article.id,
+      newTitle: '⚡ ' + article.title + ' (Термінове оновлення)',
+      newSubtitle: 'Важливі правки першоджерела',
+      newExcerpt: 'Джерело суттєво переписало вступну частину статті.',
+      newContent: '<p>Повністю перероблений текст першоджерела з новими висновками тестів.</p>',
+      newAuthor: 'Головний редактор джерела',
+      newFeaturedImageUrl: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=1200&q=80'
+    });
+  } else if (type === 'ARTICLE_DELETED') {
+    result = ChangeDetectionService.recordDeletedSourceArticle(srcArtId, article.id);
+  }
+
+  res.json({ success: true, result });
 });
 
 // ----------------------------------------------------

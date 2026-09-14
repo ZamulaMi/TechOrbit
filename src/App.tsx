@@ -86,6 +86,7 @@ export function App() {
             <Route path="/admin/articles" element={<ArticlesListPage />} />
             <Route path="/admin/articles/new" element={<ArticleEditorPage />} />
             <Route path="/admin/articles/:id/edit" element={<ArticleEditorPage />} />
+            <Route path="/admin/review" element={<ReviewQueuePage />} />
             <Route path="/admin/review-queue" element={<ReviewQueuePage />} />
             <Route path="/admin/sources" element={<SourcesPage />} />
             <Route path="/admin/changes" element={<ChangesPage />} />

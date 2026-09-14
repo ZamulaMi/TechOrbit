@@ -114,7 +114,18 @@ export interface SourceSnapshot {
   content_hash: string;
   raw_content: string;
   title: string;
+  subtitle?: string | null;
+  excerpt?: string | null;
+  content_text?: string | null;
+  content_html?: string | null;
+  author?: string | null;
+  category?: string | null;
+  featured_image_url?: string | null;
+  structured_blocks_json?: string | null;
+  tags_json?: string | null;
+  links_json?: string | null;
   snapshot_at: string;
+  created_at?: string;
 }
 
 export interface Article {
@@ -145,6 +156,7 @@ export interface Article {
   category_name_en?: string;
   author_name?: string;
   source_name?: string;
+  translation_status?: string;
 }
 
 export interface ArticleVersion {
@@ -152,9 +164,12 @@ export interface ArticleVersion {
   article_id: string;
   version_number: number;
   title: string;
+  subtitle?: string | null;
   excerpt: string;
   content: string;
+  featured_image_url?: string | null;
   changed_by: string;
+  changed_by_username?: string;
   change_reason: string;
   created_at: string;
 }
@@ -225,17 +240,85 @@ export interface Media {
   created_at: string;
 }
 
+export type ChangeEventType =
+  | 'NEW_ARTICLE'
+  | 'TITLE_CHANGED'
+  | 'CONTENT_CHANGED'
+  | 'IMAGE_CHANGED'
+  | 'CATEGORY_CHANGED'
+  | 'AUTHOR_CHANGED'
+  | 'LINK_CHANGED'
+  | 'ARTICLE_DELETED'
+  | 'MULTIPLE_CHANGES'
+  | 'new_article'
+  | 'content_updated'
+  | 'title_updated'
+  | 'author_updated'
+  | 'deleted_at_source';
+
+export type ChangeEventStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PARTIALLY_APPROVED' | 'pending_review' | 'merged' | 'dismissed';
+export type ChangeSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+export interface FieldDiff<T = any> {
+  oldValue: T;
+  newValue: T;
+  changed: boolean;
+}
+
+export interface BlockDiff {
+  index: number;
+  type: string;
+  status: 'added' | 'removed' | 'changed' | 'unchanged';
+  oldBlock?: any;
+  newBlock?: any;
+}
+
+export interface StructuredDiff {
+  title?: FieldDiff<string>;
+  subtitle?: FieldDiff<string>;
+  excerpt?: FieldDiff<string>;
+  content?: FieldDiff<string>;
+  author?: FieldDiff<string>;
+  category?: FieldDiff<string>;
+  featured_image_url?: FieldDiff<string>;
+  tags?: FieldDiff<string[]>;
+  links?: FieldDiff<string[]>;
+  blocks?: BlockDiff[];
+  stats?: {
+    addedBlocks: number;
+    removedBlocks: number;
+    changedBlocks: number;
+    unchangedBlocks: number;
+  };
+}
+
 export interface ChangeEvent {
   id: string;
+  source_id?: string | null;
   source_article_id: string;
   article_id: string | null;
-  event_type: 'new_article' | 'content_updated' | 'title_updated' | 'author_updated' | 'deleted_at_source';
-  diff_summary: string;
-  previous_hash: string | null;
-  new_hash: string;
-  status: 'pending_review' | 'merged' | 'dismissed';
+  old_version_id?: string | null;
+  new_snapshot_id?: string | null;
+  change_type: ChangeEventType;
+  severity: ChangeSeverity;
+  summary: string;
+  diff: StructuredDiff | string;
+  status: ChangeEventStatus;
   detected_at: string;
-  resolved_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  review_comment: string | null;
+  // Joined fields for admin UI
+  source_name?: string;
+  source_url?: string;
+  article_title?: string;
+  source_title?: string;
+  // Backwards compatibility
+  event_type?: string;
+  diff_summary?: string;
+  previous_hash?: string | null;
+  new_hash?: string;
+  resolved_at?: string | null;
 }
 
 export interface Notification {

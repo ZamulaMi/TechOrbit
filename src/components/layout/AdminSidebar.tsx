@@ -28,8 +28,8 @@ export function AdminSidebar({ reviewCount = 0, changesCount = 0 }: AdminSidebar
     { name: 'Панель (Dashboard)', path: '/admin', icon: LayoutDashboard, exact: true },
     { name: 'Статті & Редактор', path: '/admin/articles', icon: FileText },
     {
-      name: 'Черга модерації',
-      path: '/admin/review-queue',
+      name: 'Черга модерації (Review)',
+      path: '/admin/review',
       icon: CheckSquare,
       badge: reviewCount > 0 ? reviewCount : undefined,
       badgeColor: 'bg-amber-500 text-slate-950 font-bold'
@@ -49,6 +49,9 @@ export function AdminSidebar({ reviewCount = 0, changesCount = 0 }: AdminSidebar
   ];
 
   const isActive = (itemPath: string, exact?: boolean) => {
+    if (itemPath === '/admin/review') {
+      return location.pathname.startsWith('/admin/review');
+    }
     if (exact) return location.pathname === itemPath;
     return location.pathname.startsWith(itemPath);
   };
