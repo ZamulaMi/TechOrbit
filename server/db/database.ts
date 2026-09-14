@@ -443,6 +443,19 @@ export function initDatabase() {
 
   migrateColumn('articles', 'translation_status TEXT DEFAULT "NOT_STARTED"');
   migrateColumn('articles', 'source_status TEXT DEFAULT "active"');
+  migrateColumn('articles', 'structured_blocks_json TEXT DEFAULT "[]"');
+  migrateColumn('articles', 'meta_title_uk TEXT DEFAULT ""');
+  migrateColumn('articles', 'meta_title_en TEXT DEFAULT ""');
+  migrateColumn('articles', 'meta_desc_uk TEXT DEFAULT ""');
+  migrateColumn('articles', 'meta_desc_en TEXT DEFAULT ""');
+  migrateColumn('articles', 'tags_json TEXT DEFAULT "[]"');
+
+  migrateColumn('article_translations', 'meta_title TEXT DEFAULT ""');
+  migrateColumn('article_translations', 'meta_description TEXT DEFAULT ""');
+  migrateColumn('article_translations', 'status TEXT DEFAULT "pending"');
+  migrateColumn('article_translations', 'translated_at TEXT');
+  migrateColumn('article_translations', 'reviewed_at TEXT');
+  migrateColumn('article_translations', 'structured_blocks_json TEXT DEFAULT "[]"');
 
   seedData();
 }

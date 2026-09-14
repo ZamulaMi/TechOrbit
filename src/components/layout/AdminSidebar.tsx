@@ -11,7 +11,8 @@ import {
   ShieldAlert,
   ExternalLink,
   Cpu,
-  LogOut
+  LogOut,
+  Languages
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.tsx';
 
@@ -27,6 +28,7 @@ export function AdminSidebar({ reviewCount = 0, changesCount = 0 }: AdminSidebar
   const navigation = [
     { name: 'Панель (Dashboard)', path: '/admin', icon: LayoutDashboard, exact: true },
     { name: 'Статті & Редактор', path: '/admin/articles', icon: FileText },
+    { name: 'Центр перекладів (UA/EN)', path: '/admin/translations', icon: Languages },
     {
       name: 'Черга модерації (Review)',
       path: '/admin/review',

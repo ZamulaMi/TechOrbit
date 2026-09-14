@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useParams } from 'react-router-dom';
 import { Clock, User, ArrowRight, Sparkles, ExternalLink, Flame, ShieldAlert, Cpu } from 'lucide-react';
 import { api } from '../../api/client.ts';
 import { Article, Category, Language, AdSlot } from '../../types.ts';
@@ -10,6 +10,9 @@ interface HomePageProps {
 }
 
 export function HomePage({ currentLang, categories }: HomePageProps) {
+  const { lang } = useParams<{ lang?: string }>();
+  const activeLang: Language = lang === 'en' || lang === 'uk' ? lang : currentLang;
+
   const [searchParams] = useSearchParams();
   const searchFilter = searchParams.get('q') || '';
 
@@ -24,7 +27,7 @@ export function HomePage({ currentLang, categories }: HomePageProps) {
     try {
       const [articlesData, adsData] = await Promise.all([
         api.public.getArticles({
-          lang: currentLang,
+          lang: activeLang,
           category: activeCategory !== 'all' ? activeCategory : undefined,
           search: searchFilter || undefined,
           limit: 12
@@ -43,7 +46,7 @@ export function HomePage({ currentLang, categories }: HomePageProps) {
 
   useEffect(() => {
     loadData();
-  }, [currentLang, activeCategory, searchFilter]);
+  }, [activeLang, activeCategory, searchFilter]);
 
   const heroArticle = articles.length > 0 ? articles[0] : null;
   const secondaryArticles = articles.length > 1 ? articles.slice(1, 4) : [];

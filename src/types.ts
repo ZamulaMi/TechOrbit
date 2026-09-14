@@ -155,6 +155,29 @@ export interface DiagnosticResult {
   error?: string;
 }
 
+export interface EditorBlock {
+  id: string;
+  type:
+    | 'paragraph'
+    | 'heading_2'
+    | 'heading_3'
+    | 'quote'
+    | 'image'
+    | 'gallery'
+    | 'video'
+    | 'embed'
+    | 'link'
+    | 'list'
+    | 'table'
+    | 'code'
+    | 'ad'
+    | 'html';
+  content: any;
+  settings: Record<string, any>;
+  order: number;
+  visible: boolean;
+}
+
 export interface Article {
   id: string;
   source_id?: string;
@@ -182,6 +205,14 @@ export interface Article {
   updated_at: string;
   published_at?: string;
   source_name?: string;
+  translation_status?: string;
+  structured_blocks_json?: string | null;
+  meta_title_uk?: string;
+  meta_title_en?: string;
+  meta_desc_uk?: string;
+  meta_desc_en?: string;
+  tags_json?: string;
+  tags?: string[];
 }
 
 export interface ArticleTranslation {
@@ -192,10 +223,16 @@ export interface ArticleTranslation {
   subtitle?: string;
   excerpt: string;
   content: string;
+  meta_title?: string;
+  meta_description?: string;
   slug: string;
-  translation_status: 'draft' | 'reviewed' | 'published';
+  status?: string;
+  translation_status: 'pending' | 'draft' | 'in_progress' | 'reviewed' | 'approved' | 'rejected' | 'published';
   auto_translated: boolean;
-  reviewed_by?: string;
+  reviewed_by?: string | null;
+  translated_at?: string | null;
+  reviewed_at?: string | null;
+  structured_blocks_json?: string;
   updated_at: string;
 }
 

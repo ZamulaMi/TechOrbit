@@ -58,6 +58,9 @@ export class ArticleService {
     const querySql = `
       SELECT
         a.*,
+        COALESCE(te.title, a.title) as title,
+        COALESCE(te.excerpt, a.excerpt) as excerpt,
+        COALESCE(te.slug, a.slug_en) as slug_en,
         c.name_uk as category_name_uk,
         c.name_en as category_name_en,
         au.name as author_name,
@@ -66,6 +69,7 @@ export class ArticleService {
       LEFT JOIN categories c ON c.id = a.category_id
       LEFT JOIN authors au ON au.id = a.author_id
       LEFT JOIN sources s ON s.id = a.source_id
+      LEFT JOIN article_translations te ON te.article_id = a.id AND te.language = 'en' AND '${lang}' = 'en'
       ${whereClause}
       ORDER BY a.published_at DESC, a.created_at DESC
       LIMIT ? OFFSET ?
@@ -87,11 +91,29 @@ export class ArticleService {
       LEFT JOIN categories c ON c.id = a.category_id
       LEFT JOIN authors au ON au.id = a.author_id
       LEFT JOIN sources s ON s.id = a.source_id
-      WHERE (a.slug_uk = ? OR a.slug_en = ?) AND a.status IN ('APPROVED', 'PUBLISHED')
+      WHERE (a.slug_uk = ? OR a.slug_en = ? OR a.id IN (SELECT article_id FROM article_translations WHERE slug = ?))
+        AND a.status IN ('APPROVED', 'PUBLISHED')
       LIMIT 1
     `;
-    const art = db.prepare(sql).get(slug, slug) as any;
-    return art || null;
+    const art = db.prepare(sql).get(slug, slug, slug) as any;
+    if (!art) return null;
+
+    if (lang === 'en' || art.slug_en === slug) {
+      const trans = db.prepare('SELECT * FROM article_translations WHERE article_id = ? AND language = ?').get(art.id, 'en') as any;
+      if (trans) {
+        art.title = trans.title || art.title;
+        art.subtitle = trans.subtitle || art.subtitle;
+        art.excerpt = trans.excerpt || art.excerpt;
+        art.content = trans.content || art.content;
+        if (trans.structured_blocks_json && trans.structured_blocks_json !== '[]') {
+          art.structured_blocks_json = trans.structured_blocks_json;
+        }
+        art.meta_title_en = trans.meta_title || art.meta_title_en;
+        art.meta_desc_en = trans.meta_description || art.meta_desc_en;
+      }
+    }
+
+    return art;
   }
 
   static getAdminArticles(options: {
@@ -258,6 +280,13 @@ export class ArticleService {
         rights_status = ?,
         slug_uk = ?,
         slug_en = ?,
+        structured_blocks_json = ?,
+        meta_title_uk = ?,
+        meta_title_en = ?,
+        meta_desc_uk = ?,
+        meta_desc_en = ?,
+        tags_json = ?,
+        translation_status = COALESCE(?, translation_status),
         updated_at = ?,
         published_at = ?
       WHERE id = ?
@@ -265,7 +294,7 @@ export class ArticleService {
 
     stmt.run(
       updated.title,
-      updated.subtitle,
+      updated.subtitle || '',
       updated.excerpt,
       updated.content,
       updated.category_id,
@@ -275,6 +304,13 @@ export class ArticleService {
       updated.rights_status,
       updated.slug_uk,
       updated.slug_en,
+      updated.structured_blocks_json || existing.structured_blocks_json || '[]',
+      updated.meta_title_uk || existing.meta_title_uk || '',
+      updated.meta_title_en || existing.meta_title_en || '',
+      updated.meta_desc_uk || existing.meta_desc_uk || '',
+      updated.meta_desc_en || existing.meta_desc_en || '',
+      updated.tags_json || existing.tags_json || '[]',
+      data.translation_status || null,
       now,
       updated.published_at,
       id

@@ -3,7 +3,10 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AdminLayout } from '../../components/layout/AdminLayout.tsx';
 import { StatusBadge } from '../../components/common/StatusBadge.tsx';
 import { api } from '../../api/client.ts';
-import { Article, ArticleVersion, ArticleTranslation, Category, Author, Source, ArticleStatus } from '../../types.ts';
+import { Article, ArticleVersion, ArticleTranslation, Category, Author, Source, ArticleStatus, EditorBlock } from '../../types.ts';
+import { RichBlockEditor } from '../../components/admin/RichBlockEditor.tsx';
+import { PublishChecklist } from '../../components/admin/PublishChecklist.tsx';
+import { ArticlePreviewModal } from '../../components/admin/ArticlePreviewModal.tsx';
 import {
   Save,
   ArrowLeft,
@@ -15,7 +18,11 @@ import {
   Globe,
   Image as ImageIcon,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  LayoutGrid,
+  FileCode,
+  Search,
+  ExternalLink
 } from 'lucide-react';
 
 export function ArticleEditorPage() {
@@ -35,15 +42,29 @@ export function ArticleEditorPage() {
   const [rightsStatus, setRightsStatus] = useState<Article['rights_status']>('fair_use_rewritten');
   const [sourceUrl, setSourceUrl] = useState('');
   const [sourceAuthor, setSourceAuthor] = useState('');
+  const [sourceName, setSourceName] = useState('');
   const [slugUk, setSlugUk] = useState('');
+  const [slugEn, setSlugEn] = useState('');
   const [changeReason, setChangeReason] = useState('Редакційні правки');
+
+  // SEO fields
+  const [metaTitleUk, setMetaTitleUk] = useState('');
+  const [metaDescUk, setMetaDescUk] = useState('');
+  const [metaTitleEn, setMetaTitleEn] = useState('');
+  const [metaDescEn, setMetaDescEn] = useState('');
+
+  // Structured blocks
+  const [blocks, setBlocks] = useState<EditorBlock[]>([]);
+  const [editorMode, setEditorMode] = useState<'blocks' | 'markdown'>('blocks');
 
   // Translation (EN) tab
   const [activeTab, setActiveTab] = useState<'uk' | 'en'>('uk');
   const [enTitle, setEnTitle] = useState('');
+  const [enSubtitle, setEnSubtitle] = useState('');
   const [enExcerpt, setEnExcerpt] = useState('');
   const [enContent, setEnContent] = useState('');
-  const [enSlug, setEnSlug] = useState('');
+  const [enBlocks, setEnBlocks] = useState<EditorBlock[]>([]);
+  const [hasEnTranslation, setHasEnTranslation] = useState(false);
 
   // Aux state
   const [categories, setCategories] = useState<Category[]>([]);
@@ -52,6 +73,7 @@ export function ArticleEditorPage() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [translating, setTranslating] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Load article, categories, authors, versions
@@ -82,15 +104,46 @@ export function ArticleEditorPage() {
         setRightsStatus(art.rights_status);
         setSourceUrl(art.source_url || '');
         setSourceAuthor(art.source_author || '');
+        setSourceName(art.source_name || '');
         setSlugUk(art.slug_uk);
+        setSlugEn(art.slug_en || '');
+        setMetaTitleUk(art.meta_title_uk || '');
+        setMetaDescUk(art.meta_desc_uk || '');
+        setMetaTitleEn(art.meta_title_en || '');
+        setMetaDescEn(art.meta_desc_en || '');
         setVersions(vers);
+
+        // Parse structured blocks
+        if (art.structured_blocks_json && art.structured_blocks_json !== '[]') {
+          try {
+            setBlocks(JSON.parse(art.structured_blocks_json));
+          } catch {
+            setBlocks(convertMarkdownToBlocks(art.content || ''));
+          }
+        } else if (art.content) {
+          setBlocks(convertMarkdownToBlocks(art.content));
+        }
 
         const enTranslation = trans.find(t => t.language === 'en');
         if (enTranslation) {
+          setHasEnTranslation(true);
           setEnTitle(enTranslation.title);
+          setEnSubtitle(enTranslation.subtitle || '');
           setEnExcerpt(enTranslation.excerpt || '');
           setEnContent(enTranslation.content || '');
-          setEnSlug(enTranslation.slug || '');
+          if (enTranslation.slug) setSlugEn(enTranslation.slug);
+          if (enTranslation.meta_title) setMetaTitleEn(enTranslation.meta_title);
+          if (enTranslation.meta_description) setMetaDescEn(enTranslation.meta_description);
+
+          if (enTranslation.structured_blocks_json && enTranslation.structured_blocks_json !== '[]') {
+            try {
+              setEnBlocks(JSON.parse(enTranslation.structured_blocks_json));
+            } catch {
+              setEnBlocks(convertMarkdownToBlocks(enTranslation.content || ''));
+            }
+          } else if (enTranslation.content) {
+            setEnBlocks(convertMarkdownToBlocks(enTranslation.content));
+          }
         }
       }
     } catch (err: any) {
@@ -104,10 +157,55 @@ export function ArticleEditorPage() {
     loadData();
   }, [id]);
 
+  function convertMarkdownToBlocks(md: string): EditorBlock[] {
+    const lines = md.split('\n\n');
+    return lines
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map((line, idx) => {
+        const blkId = 'blk_' + idx + '_' + Math.random().toString(36).substring(2, 6);
+        if (line.startsWith('### ')) {
+          return { id: blkId, type: 'heading_3', content: line.replace('### ', ''), settings: {}, order: idx, visible: true };
+        }
+        if (line.startsWith('## ')) {
+          return { id: blkId, type: 'heading_2', content: line.replace('## ', ''), settings: {}, order: idx, visible: true };
+        }
+        if (line.startsWith('> ')) {
+          return { id: blkId, type: 'quote', content: { text: line.replace('> ', ''), author: '' }, settings: {}, order: idx, visible: true };
+        }
+        return { id: blkId, type: 'paragraph', content: line, settings: {}, order: idx, visible: true };
+      });
+  }
+
+  function convertBlocksToMarkdown(blks: EditorBlock[]): string {
+    return blks
+      .filter(b => b.visible !== false)
+      .map(b => {
+        if (b.type === 'heading_2') return `## ${typeof b.content === 'string' ? b.content : b.content?.text}`;
+        if (b.type === 'heading_3') return `### ${typeof b.content === 'string' ? b.content : b.content?.text}`;
+        if (b.type === 'quote') return `> ${typeof b.content === 'string' ? b.content : b.content?.text}`;
+        if (b.type === 'image') return `![${b.content?.alt || ''}](${b.content?.url || ''})\n*${b.content?.caption || ''}*`;
+        if (b.type === 'code') return `\`\`\`${b.content?.language || 'typescript'}\n${typeof b.content === 'string' ? b.content : b.content?.code}\n\`\`\``;
+        if (b.type === 'list') return (b.content?.items || []).map((it: string) => `- ${it}`).join('\n');
+        return typeof b.content === 'string' ? b.content : b.content?.text || '';
+      })
+      .join('\n\n');
+  }
+
+  const handleBlocksChange = (newBlocks: EditorBlock[]) => {
+    setBlocks(newBlocks);
+    // keep content in sync
+    setContent(convertBlocksToMarkdown(newBlocks));
+  };
+
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setMessage(null);
+
+    // Sync markdown and blocks
+    const finalContent = editorMode === 'blocks' ? convertBlocksToMarkdown(blocks) : content;
+    const finalBlocks = editorMode === 'blocks' ? blocks : convertMarkdownToBlocks(content);
 
     try {
       if (isNew) {
@@ -115,7 +213,7 @@ export function ArticleEditorPage() {
           title,
           subtitle,
           excerpt,
-          content,
+          content: finalContent,
           status,
           category_id: categoryId || undefined,
           author_id: authorId || undefined,
@@ -130,21 +228,25 @@ export function ArticleEditorPage() {
           await api.admin.saveTranslation(created.id, {
             language: 'en',
             title: enTitle,
+            subtitle: enSubtitle,
             excerpt: enExcerpt,
             content: enContent,
-            slug: enSlug || undefined,
-            translation_status: 'draft'
+            slug: slugEn || undefined,
+            meta_title: metaTitleEn,
+            meta_description: metaDescEn,
+            translation_status: 'draft',
+            structured_blocks_json: JSON.stringify(enBlocks)
           });
         }
 
         setMessage({ type: 'success', text: 'Статтю успішно створено!' });
         setTimeout(() => navigate(`/admin/articles/${created.id}/edit`), 800);
       } else if (id) {
-        const updated = await api.admin.updateArticle(id, {
+        await api.admin.updateArticle(id, {
           title,
           subtitle,
           excerpt,
-          content,
+          content: finalContent,
           status,
           category_id: categoryId || undefined,
           author_id: authorId || undefined,
@@ -152,18 +254,29 @@ export function ArticleEditorPage() {
           rights_status: rightsStatus,
           source_url: sourceUrl || undefined,
           source_author: sourceAuthor || undefined,
+          slug_uk: slugUk || undefined,
+          slug_en: slugEn || undefined,
+          structured_blocks_json: JSON.stringify(finalBlocks),
+          meta_title_uk: metaTitleUk || title,
+          meta_title_en: metaTitleEn || enTitle,
+          meta_desc_uk: metaDescUk || excerpt,
+          meta_desc_en: metaDescEn || enExcerpt,
           changeReason: changeReason || 'Редакційні правки'
         });
 
-        // Save English translation
+        // Save English translation if available
         if (enTitle) {
           await api.admin.saveTranslation(id, {
             language: 'en',
             title: enTitle,
+            subtitle: enSubtitle,
             excerpt: enExcerpt,
-            content: enContent,
-            slug: enSlug || undefined,
-            translation_status: 'published'
+            content: enBlocks.length > 0 ? convertBlocksToMarkdown(enBlocks) : enContent,
+            slug: slugEn || undefined,
+            meta_title: metaTitleEn,
+            meta_description: metaDescEn,
+            translation_status: 'draft',
+            structured_blocks_json: JSON.stringify(enBlocks)
           });
         }
 
@@ -192,8 +305,21 @@ export function ArticleEditorPage() {
       const res = await api.admin.translateWithAi(id, 'en');
       if (res.translation) {
         setEnTitle(res.translation.title);
+        setEnSubtitle(res.translation.subtitle || '');
         setEnExcerpt(res.translation.excerpt);
         setEnContent(res.translation.content);
+        if (res.translation.slug) setSlugEn(res.translation.slug);
+        if (res.translation.meta_title) setMetaTitleEn(res.translation.meta_title);
+        if (res.translation.meta_description) setMetaDescEn(res.translation.meta_description);
+
+        if (res.translation.structured_blocks_json) {
+          try {
+            setEnBlocks(JSON.parse(res.translation.structured_blocks_json));
+          } catch {
+            setEnBlocks(convertMarkdownToBlocks(res.translation.content));
+          }
+        }
+        setHasEnTranslation(true);
         setActiveTab('en');
         setMessage({
           type: 'success',
@@ -219,6 +345,7 @@ export function ArticleEditorPage() {
         setTitle(res.article.title);
         setExcerpt(res.article.excerpt);
         setContent(res.article.content);
+        setBlocks(convertMarkdownToBlocks(res.article.content));
         setMessage({ type: 'success', text: `Успішно відкочено до версії #${versionNumber}!` });
         const vers = await api.admin.getVersions(id);
         setVersions(vers);
@@ -257,25 +384,45 @@ export function ArticleEditorPage() {
 
           <div className="flex items-center gap-2.5">
             {!isNew && (
-              <button
-                type="button"
-                onClick={handleAiTranslate}
-                disabled={translating}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-xs font-semibold transition-colors disabled:opacity-50"
-              >
-                <Sparkles className={`w-3.5 h-3.5 ${translating ? 'animate-spin' : ''}`} />
-                <span>{translating ? 'Переклад через Gemini...' : 'AI Переклад (UK → EN)'}</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowPreviewModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors border border-slate-700"
+                  id="preview-draft-btn"
+                >
+                  <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Превʼю (Desktop/Mobile)</span>
+                </button>
+
+                <Link
+                  to="/admin/translations"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 text-xs font-semibold transition-colors"
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>Центр перекладів</span>
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={handleAiTranslate}
+                  disabled={translating}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-xs font-semibold transition-colors disabled:opacity-50"
+                >
+                  <Sparkles className={`w-3.5 h-3.5 ${translating ? 'animate-spin' : ''}`} />
+                  <span>{translating ? 'Переклад через Gemini...' : 'AI Переклад (UA → EN)'}</span>
+                </button>
+              </>
             )}
 
             {!isNew && slugUk && status === 'PUBLISHED' && (
               <Link
-                to={`/article/${slugUk}`}
+                to={`/uk/article/${slugUk}`}
                 target="_blank"
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors border border-slate-700"
               >
-                <Eye className="w-3.5 h-3.5" />
-                <span>Перегляд на сайті</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>На сайті</span>
               </Link>
             )}
 
@@ -309,33 +456,75 @@ export function ArticleEditorPage() {
         )}
 
         {/* Language Tabs Selector */}
-        <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab('uk')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2 ${
-              activeTab === 'uk'
-                ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
-                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-            }`}
-          >
-            <span>Українська версія (UK)</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-300"></span>
-          </button>
+        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('uk')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2 ${
+                activeTab === 'uk'
+                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <span>Українська версія (UA)</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-300"></span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('en')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2 ${
-              activeTab === 'en'
-                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
-                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-            }`}
-          >
-            <Globe className="w-3.5 h-3.5" />
-            <span>English Translation (EN)</span>
-            {enTitle && <span className="text-[10px] px-1.5 rounded bg-indigo-900 text-indigo-200">Active</span>}
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('en')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2 ${
+                activeTab === 'en'
+                  ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>English Translation (EN)</span>
+              {hasEnTranslation && <span className="text-[10px] px-1.5 rounded bg-indigo-900 text-indigo-200">Active</span>}
+            </button>
+          </div>
+
+          {/* Editor Mode: Blocks vs Markdown */}
+          {activeTab === 'uk' && (
+            <div className="flex bg-slate-900 rounded-lg p-0.5 border border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  if (editorMode === 'markdown') {
+                    setBlocks(convertMarkdownToBlocks(content));
+                  }
+                  setEditorMode('blocks');
+                }}
+                className={`flex items-center space-x-1 px-3 py-1 rounded transition ${
+                  editorMode === 'blocks'
+                    ? 'bg-emerald-600 text-white font-semibold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Блоки ({blocks.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (editorMode === 'blocks') {
+                    setContent(convertBlocksToMarkdown(blocks));
+                  }
+                  setEditorMode('markdown');
+                }}
+                className={`flex items-center space-x-1 px-3 py-1 rounded transition ${
+                  editorMode === 'markdown'
+                    ? 'bg-emerald-600 text-white font-semibold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <FileCode className="w-3.5 h-3.5" />
+                <span>Markdown</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* MAIN EDITOR & SIDEBAR LAYOUT */}
@@ -386,18 +575,71 @@ export function ArticleEditorPage() {
                   />
                 </div>
 
+                {/* Structured Blocks or Markdown View */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Повний текст статті (Markdown / HTML) *
+                  <label className="block text-xs font-semibold text-slate-300 mb-2 flex items-center justify-between">
+                    <span>{editorMode === 'blocks' ? 'Редактор блоків контенту' : 'Markdown сирий текст'} *</span>
+                    <span className="text-[11px] text-slate-400 font-normal">
+                      Підтримує параграфи, H2, H3, цитати, зображення, списки, таблиці, код та рекламу
+                    </span>
                   </label>
-                  <textarea
-                    rows={14}
-                    value={content}
-                    onChange={e => setContent(e.target.value)}
-                    placeholder="Введіть основний зміст статті. Підтримуються параграфи та списки..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono leading-relaxed"
-                    required
-                  />
+
+                  {editorMode === 'blocks' ? (
+                    <RichBlockEditor
+                      blocks={blocks}
+                      onChange={handleBlocksChange}
+                      lang="uk"
+                    />
+                  ) : (
+                    <textarea
+                      rows={14}
+                      value={content}
+                      onChange={e => setContent(e.target.value)}
+                      placeholder="Введіть основний зміст статті..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono leading-relaxed"
+                      required
+                    />
+                  )}
+                </div>
+
+                {/* SEO Meta Fields */}
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                  <div className="flex items-center space-x-2 text-xs font-bold text-slate-300">
+                    <Search className="w-4 h-4 text-emerald-400" />
+                    <span>SEO Метадані (Пошукова оптимізація UA)</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Meta Title (UA)</label>
+                      <input
+                        type="text"
+                        value={metaTitleUk}
+                        onChange={e => setMetaTitleUk(e.target.value)}
+                        placeholder={title || 'SEO Заголовок...'}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Slug URL (UA)</label>
+                      <input
+                        type="text"
+                        value={slugUk}
+                        onChange={e => setSlugUk(e.target.value)}
+                        placeholder="chpu-posylannya-statti"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-cyan-400 font-mono"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">Meta Description (UA)</label>
+                    <textarea
+                      rows={2}
+                      value={metaDescUk}
+                      onChange={e => setMetaDescUk(e.target.value)}
+                      placeholder={excerpt || 'Короткий SEO опис для пошукових систем...'}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
+                    />
+                  </div>
                 </div>
 
                 {!isNew && (
@@ -419,7 +661,7 @@ export function ArticleEditorPage() {
               /* ENGLISH TRANSLATION FIELDS */
               <div className="bg-slate-900 border border-indigo-900/40 rounded-2xl p-5 space-y-4 shadow-xl">
                 <div className="p-3 bg-indigo-950/40 border border-indigo-800/40 rounded-xl text-xs text-indigo-300 flex items-center justify-between">
-                  <span>Переклад англійською мовою. Використовується для міжнародної версії TechOrbit.</span>
+                  <span>Переклад англійською мовою. Використовується для міжнародної версії TechOrbit (/en/).</span>
                   <button
                     type="button"
                     onClick={handleAiTranslate}
@@ -445,6 +687,19 @@ export function ArticleEditorPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Article Subtitle (EN)
+                  </label>
+                  <input
+                    type="text"
+                    value={enSubtitle}
+                    onChange={e => setEnSubtitle(e.target.value)}
+                    placeholder="English subtitle..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                     Short Excerpt (EN)
                   </label>
                   <textarea
@@ -456,23 +711,61 @@ export function ArticleEditorPage() {
                   />
                 </div>
 
+                {/* English Blocks Editor */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Full Content (EN)
+                  <label className="block text-xs font-semibold text-slate-300 mb-2">
+                    English Content Blocks ({enBlocks.length})
                   </label>
-                  <textarea
-                    rows={14}
-                    value={enContent}
-                    onChange={e => setEnContent(e.target.value)}
-                    placeholder="English body text..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-mono leading-relaxed"
+                  <RichBlockEditor
+                    blocks={enBlocks}
+                    onChange={setEnBlocks}
+                    lang="en"
                   />
+                </div>
+
+                {/* English SEO */}
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                  <div className="text-xs font-bold text-indigo-300">
+                    SEO Meta Information (EN)
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Meta Title (EN)</label>
+                      <input
+                        type="text"
+                        value={metaTitleEn}
+                        onChange={e => setMetaTitleEn(e.target.value)}
+                        placeholder="SEO Title (EN)..."
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Slug URL (EN)</label>
+                      <input
+                        type="text"
+                        value={slugEn}
+                        onChange={e => setSlugEn(e.target.value)}
+                        placeholder="english-article-slug"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-indigo-400 font-mono"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">Meta Description (EN)</label>
+                    <textarea
+                      rows={2}
+                      value={metaDescEn}
+                      onChange={e => setMetaDescEn(e.target.value)}
+                      placeholder="SEO Description (EN)..."
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
+                    />
+                  </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Sidebar: Metadata, Rights, Version Timeline */}
+          {/* Sidebar: Metadata, Checklist, Rights, Versions */}
           <div className="lg:col-span-4 space-y-5">
             {/* Status & Category */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
@@ -530,6 +823,30 @@ export function ArticleEditorPage() {
               </div>
             </div>
 
+            {/* PRE-PUBLISH CHECKLIST */}
+            <PublishChecklist
+              article={{
+                title,
+                excerpt,
+                content,
+                category_id: categoryId,
+                author_id: authorId,
+                featured_image_url: featuredImageUrl,
+                slug_uk: slugUk,
+                slug_en: slugEn,
+                meta_title_uk: metaTitleUk,
+                meta_desc_uk: metaDescUk,
+                rights_status: rightsStatus,
+                translation_status: hasEnTranslation ? 'COMPLETED' : 'PENDING'
+              }}
+              blocks={blocks}
+              hasEnTranslation={hasEnTranslation}
+              onFixField={(field) => {
+                const el = document.querySelector(`[name="${field}"]`) as HTMLElement;
+                if (el) el.focus();
+              }}
+            />
+
             {/* Featured Image */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
@@ -582,6 +899,17 @@ export function ArticleEditorPage() {
               </div>
 
               <div>
+                <label className="block text-xs text-slate-400 mb-1">Назва джерела</label>
+                <input
+                  type="text"
+                  value={sourceName}
+                  onChange={e => setSourceName(e.target.value)}
+                  placeholder="The Verge, Wylsacom, Bloomberg..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
                 <label className="block text-xs text-slate-400 mb-1">URL першоджерела</label>
                 <input
                   type="url"
@@ -598,7 +926,7 @@ export function ArticleEditorPage() {
                   type="text"
                   value={sourceAuthor}
                   onChange={e => setSourceAuthor(e.target.value)}
-                  placeholder="Олександр П."
+                  placeholder="Автор першоджерела"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
                 />
               </div>
@@ -641,6 +969,16 @@ export function ArticleEditorPage() {
           </div>
         </div>
       </form>
+
+      {/* Preview Modal */}
+      {!isNew && id && (
+        <ArticlePreviewModal
+          articleId={id}
+          isOpen={showPreviewModal}
+          onClose={() => setShowPreviewModal(false)}
+          initialLang={activeTab}
+        />
+      )}
     </AdminLayout>
   );
 }

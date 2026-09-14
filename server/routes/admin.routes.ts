@@ -14,7 +14,7 @@ import { SeoService } from '../services/seo.service.ts';
 import { AdService } from '../services/ad.service.ts';
 import { AuditService } from '../services/audit.service.ts';
 import { NotificationService } from '../services/notification.service.ts';
-import { ArticleStatus, Language } from '../types/index.ts';
+import { ArticleStatus, Language, EditorBlock } from '../types/index.ts';
 
 export const adminRouter = Router();
 
@@ -199,11 +199,32 @@ adminRouter.post('/versions/compare', (req: AuthenticatedRequest, res: Response)
 });
 
 // ----------------------------------------------------
-// 5. TRANSLATIONS
+// 5. TRANSLATIONS & EDITORIAL WORKSPACE
 // ----------------------------------------------------
+adminRouter.get('/translations', (req: AuthenticatedRequest, res: Response) => {
+  const status = req.query.status as string | undefined;
+  const search = req.query.search as string | undefined;
+  const limit = parseInt(req.query.limit as string) || 50;
+  const offset = parseInt(req.query.offset as string) || 0;
+
+  const result = TranslationService.getTranslationsSummaryList({
+    status,
+    search,
+    limit,
+    offset
+  });
+  res.json(result);
+});
+
 adminRouter.get('/articles/:id/translations', (req: AuthenticatedRequest, res: Response) => {
   const translations = TranslationService.getTranslations(req.params.id);
   res.json(translations);
+});
+
+adminRouter.get('/articles/:id/translation-workspace', (req: AuthenticatedRequest, res: Response) => {
+  const data = TranslationService.getTranslationWorkspaceData(req.params.id);
+  if (!data) return res.status(404).json({ error: 'Article not found' });
+  res.json(data);
 });
 
 adminRouter.post('/articles/:id/translations', (req: AuthenticatedRequest, res: Response) => {
@@ -214,10 +235,14 @@ adminRouter.post('/articles/:id/translations', (req: AuthenticatedRequest, res: 
     subtitle: req.body.subtitle,
     excerpt: req.body.excerpt,
     content: req.body.content,
+    meta_title: req.body.meta_title,
+    meta_description: req.body.meta_description,
     slug: req.body.slug,
-    translationStatus: req.body.translationStatus,
+    status: req.body.status || 'draft',
+    translationStatus: req.body.translationStatus || 'draft',
     autoTranslated: req.body.autoTranslated,
-    reviewedBy: req.user!.id
+    reviewedBy: req.user!.id,
+    structured_blocks_json: req.body.structured_blocks_json
   });
 
   AuditService.log({
@@ -232,28 +257,142 @@ adminRouter.post('/articles/:id/translations', (req: AuthenticatedRequest, res: 
 });
 
 adminRouter.post('/articles/:id/translate-ai', async (req: AuthenticatedRequest, res: Response) => {
-  const targetLang = (req.body.targetLang as 'uk' | 'en') || 'uk';
+  const targetLang = (req.body.targetLang as 'uk' | 'en') || 'en';
+  try {
+    const translation = await TranslationService.translateArticle(req.params.id, targetLang);
+    AuditService.log({
+      userId: req.user!.id,
+      action: 'ARTICLE_TRANSLATED_AI',
+      entityType: 'article_translation',
+      entityId: translation.id,
+      newValues: { language: targetLang, title: translation.title }
+    });
+    res.json({ success: true, translation });
+  } catch (err: any) {
+    console.error('Translation error:', err);
+    res.status(500).json({ error: err.message || 'Failed to translate article' });
+  }
+});
+
+adminRouter.post('/articles/:id/translate-block', async (req: AuthenticatedRequest, res: Response) => {
+  const targetLang = (req.body.targetLang as 'uk' | 'en') || 'en';
+  const block = req.body.block;
+  if (!block) return res.status(400).json({ error: 'Block is required' });
+
+  try {
+    const translatedBlock = await TranslationService.translateBlock(block, targetLang);
+    res.json({ success: true, block: translatedBlock });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to translate block' });
+  }
+});
+
+adminRouter.post('/articles/:id/translate-seo', async (req: AuthenticatedRequest, res: Response) => {
+  const targetLang = (req.body.targetLang as 'uk' | 'en') || 'en';
+  const { title, description } = req.body;
+  try {
+    const translatedSeo = await TranslationService.translateSEO({ title, description }, targetLang);
+    res.json({ success: true, seo: translatedSeo });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to translate SEO' });
+  }
+});
+
+adminRouter.post('/articles/:id/approve-translation', (req: AuthenticatedRequest, res: Response) => {
+  const language = (req.body.language as 'uk' | 'en') || 'en';
+  try {
+    TranslationService.approveTranslation(req.params.id, language, req.user!.id);
+    AuditService.log({
+      userId: req.user!.id,
+      action: 'TRANSLATION_APPROVED',
+      entityType: 'article',
+      entityId: req.params.id,
+      newValues: { language, approved: true }
+    });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+adminRouter.post('/articles/:id/reject-translation', (req: AuthenticatedRequest, res: Response) => {
+  const language = (req.body.language as 'uk' | 'en') || 'en';
+  const reason = req.body.reason || 'Translation rejected by editor';
+  try {
+    TranslationService.rejectTranslation(req.params.id, language, req.user!.id, reason);
+    AuditService.log({
+      userId: req.user!.id,
+      action: 'TRANSLATION_REJECTED',
+      entityType: 'article',
+      entityId: req.params.id,
+      newValues: { language, reason }
+    });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Non-indexable draft preview endpoint
+adminRouter.get('/articles/:id/preview', (req: AuthenticatedRequest, res: Response) => {
+  const lang = (req.query.lang as string) === 'en' ? 'en' : 'uk';
   const article = ArticleService.getArticleById(req.params.id);
   if (!article) return res.status(404).json({ error: 'Article not found' });
 
-  const translatedTitle = await TranslationService.translateWithGemini(article.title, targetLang, 'title');
-  const translatedExcerpt = await TranslationService.translateWithGemini(article.excerpt, targetLang, 'excerpt');
-  const translatedContent = await TranslationService.translateWithGemini(article.content, targetLang, 'content');
+  // Strictly enforce non-indexable header
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
 
-  const record = TranslationService.saveTranslation({
-    articleId: article.id,
-    language: targetLang,
-    title: translatedTitle,
-    excerpt: translatedExcerpt,
-    content: translatedContent,
-    translationStatus: 'draft',
-    autoTranslated: true,
-    reviewedBy: null
+  let title = article.title;
+  let subtitle = article.subtitle;
+  let excerpt = article.excerpt;
+  let content = article.content;
+  let blocksJson = article.structured_blocks_json || '[]';
+  let slug = article.slug_uk;
+  let metaTitle = article.meta_title_uk || article.title;
+  let metaDesc = article.meta_desc_uk || article.excerpt;
+
+  if (lang === 'en') {
+    const enTrans = TranslationService.getTranslation(article.id, 'en');
+    if (enTrans) {
+      title = enTrans.title || title;
+      subtitle = enTrans.subtitle || subtitle;
+      excerpt = enTrans.excerpt || excerpt;
+      content = enTrans.content || content;
+      if (enTrans.structured_blocks_json && enTrans.structured_blocks_json !== '[]') {
+        blocksJson = enTrans.structured_blocks_json;
+      }
+      slug = enTrans.slug || article.slug_en;
+      metaTitle = enTrans.meta_title || metaTitle;
+      metaDesc = enTrans.meta_description || metaDesc;
+    }
+  }
+
+  let blocks: EditorBlock[] = [];
+  try {
+    blocks = JSON.parse(blocksJson);
+  } catch {
+    blocks = TranslationService.markdownToBlocks(content);
+  }
+  if (blocks.length === 0 && content) {
+    blocks = TranslationService.markdownToBlocks(content);
+  }
+
+  res.json({
+    article: {
+      ...article,
+      title,
+      subtitle,
+      excerpt,
+      content,
+      slug,
+      metaTitle,
+      metaDesc,
+      blocks
+    },
+    language: lang,
+    isDraftPreview: true,
+    robotsMeta: 'noindex, nofollow'
   });
-
-  PublishingService.updateTranslationStatus(article.id, 'READY_FOR_REVIEW', req.user!.id);
-
-  res.json({ success: true, translation: record });
 });
 
 // ----------------------------------------------------

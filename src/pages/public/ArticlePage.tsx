@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Clock, User, ExternalLink, ShieldCheck, Share2, ArrowLeft, Globe, Bookmark } from 'lucide-react';
 import { api } from '../../api/client.ts';
 import { Article, ArticleTranslation, Language } from '../../types.ts';
+import { SourceAttribution } from '../../components/article/SourceAttribution.tsx';
 
 interface ArticlePageProps {
   currentLang: Language;
@@ -10,7 +11,9 @@ interface ArticlePageProps {
 }
 
 export function ArticlePage({ currentLang, onLanguageChange }: ArticlePageProps) {
-  const { slug } = useParams<{ slug: string }>();
+  const { slug, lang } = useParams<{ slug: string; lang?: string }>();
+  const activeLang: Language = lang === 'en' || lang === 'uk' ? lang : currentLang;
+
   const [article, setArticle] = useState<Article | null>(null);
   const [translations, setTranslations] = useState<ArticleTranslation[]>([]);
   const [jsonLd, setJsonLd] = useState<any>(null);
@@ -21,7 +24,7 @@ export function ArticlePage({ currentLang, onLanguageChange }: ArticlePageProps)
     if (!slug) return;
     setLoading(true);
     api.public
-      .getArticle(slug, currentLang)
+      .getArticle(slug, activeLang)
       .then(res => {
         setArticle(res.article);
         setTranslations(res.translations);
@@ -32,7 +35,7 @@ export function ArticlePage({ currentLang, onLanguageChange }: ArticlePageProps)
         setArticle(null);
       })
       .finally(() => setLoading(false));
-  }, [slug, currentLang]);
+  }, [slug, activeLang]);
 
   const handleShare = () => {
     if (navigator.clipboard) {
@@ -123,11 +126,12 @@ export function ArticlePage({ currentLang, onLanguageChange }: ArticlePageProps)
         <header className="space-y-4">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/80">
-              {currentLang === 'uk' ? article.category_name_uk : article.category_name_en}
+              {activeLang === 'uk' ? article.category_name_uk : article.category_name_en}
             </span>
             {article.source_name && (
               <span className="text-xs text-slate-400">
-                За матеріалами <span className="font-semibold text-slate-200">{article.source_name}</span>
+                {activeLang === 'uk' ? 'За матеріалами' : 'Based on reporting by'}{' '}
+                <span className="font-semibold text-slate-200">{article.source_name}</span>
               </span>
             )}
           </div>
@@ -150,14 +154,14 @@ export function ArticlePage({ currentLang, onLanguageChange }: ArticlePageProps)
                   <User className="w-3.5 h-3.5" />
                 </div>
                 <span className="font-semibold text-slate-200">
-                  {article.author_name || 'Редакція TechOrbit'}
+                  {article.author_name || (activeLang === 'uk' ? 'Редакція TechOrbit' : 'TechOrbit Editorial')}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 text-slate-400">
                 <Clock className="w-3.5 h-3.5" />
                 <span>
                   {new Date(article.published_at || article.created_at).toLocaleDateString(
-                    currentLang === 'uk' ? 'uk-UA' : 'en-US',
+                    activeLang === 'uk' ? 'uk-UA' : 'en-US',
                     { day: 'numeric', month: 'long', year: 'numeric' }
                   )}
                 </span>
@@ -217,36 +221,8 @@ export function ArticlePage({ currentLang, onLanguageChange }: ArticlePageProps)
           })}
         </div>
 
-        {/* Canonical Source & Fair Use Box */}
-        {article.source_url && (
-          <div className="mt-12 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
-            <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wider">
-              <ShieldCheck className="w-4 h-4" />
-              <span>Дотримання авторських прав & Першоджерело</span>
-            </div>
-
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Цей матеріал підготовлено на основі первинної публікації видання{' '}
-              <strong className="text-slate-200">{article.source_name || 'виробника'}</strong> за правилами
-              Fair Use та редакційної адаптації. TechOrbit забезпечує прямий доступ до оригінального джерела.
-            </p>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/80 text-xs">
-              <span className="text-slate-400">
-                {article.source_author ? `Автор першоджерела: ${article.source_author}` : 'Оригінальний реліз'}
-              </span>
-              <a
-                href={article.source_url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 font-semibold transition-colors"
-              >
-                <span>Читати на {article.source_name || 'сайті першоджерела'}</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            </div>
-          </div>
-        )}
+        {/* Source Attribution Component */}
+        <SourceAttribution article={article} language={activeLang} />
       </div>
     </article>
   );

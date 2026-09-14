@@ -10,33 +10,36 @@ interface CategoryPageProps {
 }
 
 export function CategoryPage({ currentLang, categories }: CategoryPageProps) {
-  const { slug } = useParams<{ slug: string }>();
+  const { slug, category, lang } = useParams<{ slug?: string; category?: string; lang?: string }>();
+  const activeLang: Language = lang === 'en' || lang === 'uk' ? lang : currentLang;
+  const categorySlug = category || slug || '';
+
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const matchedCat = categories.find(c => c.slug_uk === slug || c.slug_en === slug);
+  const matchedCat = categories.find(c => c.slug_uk === categorySlug || c.slug_en === categorySlug);
 
   useEffect(() => {
-    if (!slug) return;
+    if (!categorySlug) return;
     setLoading(true);
     api.public
       .getArticles({
-        lang: currentLang,
-        category: slug,
+        lang: activeLang,
+        category: categorySlug,
         limit: 20
       })
       .then(res => setArticles(res.articles))
       .catch(err => console.error('Failed to load category articles', err))
       .finally(() => setLoading(false));
-  }, [slug, currentLang]);
+  }, [categorySlug, activeLang]);
 
   const catName = matchedCat
-    ? currentLang === 'uk'
+    ? activeLang === 'uk'
       ? matchedCat.name_uk
       : matchedCat.name_en
-    : slug;
+    : categorySlug;
   const catDesc = matchedCat
-    ? currentLang === 'uk'
+    ? activeLang === 'uk'
       ? matchedCat.description_uk
       : matchedCat.description_en
     : '';

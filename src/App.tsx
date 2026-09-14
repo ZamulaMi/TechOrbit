@@ -21,6 +21,7 @@ import { MediaPage } from './pages/admin/MediaPage.tsx';
 import { CategoriesPage } from './pages/admin/CategoriesPage.tsx';
 import { SettingsPage } from './pages/admin/SettingsPage.tsx';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage.tsx';
+import { TranslationsPage } from './pages/admin/TranslationsPage.tsx';
 
 import { api } from './api/client.ts';
 import { Category, Language } from './types.ts';
@@ -32,6 +33,15 @@ export function App() {
   const [currentLang, setCurrentLang] = useState<Language>('uk');
   const [categories, setCategories] = useState<Category[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Synchronize language state if URL starts with /uk or /en
+  useEffect(() => {
+    if (location.pathname.startsWith('/en')) {
+      setCurrentLang('en');
+    } else if (location.pathname.startsWith('/uk')) {
+      setCurrentLang('uk');
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     // Load public categories for navigation
@@ -56,7 +66,78 @@ export function App() {
 
         <div className="flex-1">
           <Routes>
-            {/* Public Routes */}
+            {/* Admin CMS Routes */}
+            <Route path="/admin/login" element={<LoginPage />} />
+            <Route path="/admin" element={<DashboardPage />} />
+            <Route path="/admin/articles" element={<ArticlesListPage />} />
+            <Route path="/admin/articles/new" element={<ArticleEditorPage />} />
+            <Route path="/admin/articles/:id/edit" element={<ArticleEditorPage />} />
+            <Route path="/admin/translations" element={<TranslationsPage />} />
+            <Route path="/admin/articles/:id/translate" element={<TranslationsPage />} />
+            <Route path="/admin/review" element={<ReviewQueuePage />} />
+            <Route path="/admin/review-queue" element={<ReviewQueuePage />} />
+            <Route path="/admin/sources" element={<SourcesPage />} />
+            <Route path="/admin/changes" element={<ChangesPage />} />
+            <Route path="/admin/media" element={<MediaPage />} />
+            <Route path="/admin/categories" element={<CategoriesPage />} />
+            <Route path="/admin/settings" element={<SettingsPage />} />
+            <Route path="/admin/audit" element={<AuditLogsPage />} />
+
+            {/* Localized Public Routes */}
+            <Route
+              path="/uk"
+              element={<HomePage currentLang="uk" categories={categories} />}
+            />
+            <Route
+              path="/uk/"
+              element={<HomePage currentLang="uk" categories={categories} />}
+            />
+            <Route
+              path="/en"
+              element={<HomePage currentLang="en" categories={categories} />}
+            />
+            <Route
+              path="/en/"
+              element={<HomePage currentLang="en" categories={categories} />}
+            />
+            <Route
+              path="/uk/article/:slug"
+              element={
+                <ArticlePage
+                  currentLang="uk"
+                  onLanguageChange={setCurrentLang}
+                />
+              }
+            />
+            <Route
+              path="/en/article/:slug"
+              element={
+                <ArticlePage
+                  currentLang="en"
+                  onLanguageChange={setCurrentLang}
+                />
+              }
+            />
+            <Route
+              path="/uk/:category"
+              element={
+                <CategoryPage
+                  currentLang="uk"
+                  categories={categories}
+                />
+              }
+            />
+            <Route
+              path="/en/:category"
+              element={
+                <CategoryPage
+                  currentLang="en"
+                  categories={categories}
+                />
+              }
+            />
+
+            {/* Default Public Routes (Fallback / root) */}
             <Route
               path="/"
               element={<HomePage currentLang={currentLang} categories={categories} />}
@@ -79,21 +160,6 @@ export function App() {
                 />
               }
             />
-
-            {/* Admin CMS Routes */}
-            <Route path="/admin/login" element={<LoginPage />} />
-            <Route path="/admin" element={<DashboardPage />} />
-            <Route path="/admin/articles" element={<ArticlesListPage />} />
-            <Route path="/admin/articles/new" element={<ArticleEditorPage />} />
-            <Route path="/admin/articles/:id/edit" element={<ArticleEditorPage />} />
-            <Route path="/admin/review" element={<ReviewQueuePage />} />
-            <Route path="/admin/review-queue" element={<ReviewQueuePage />} />
-            <Route path="/admin/sources" element={<SourcesPage />} />
-            <Route path="/admin/changes" element={<ChangesPage />} />
-            <Route path="/admin/media" element={<MediaPage />} />
-            <Route path="/admin/categories" element={<CategoriesPage />} />
-            <Route path="/admin/settings" element={<SettingsPage />} />
-            <Route path="/admin/audit" element={<AuditLogsPage />} />
 
             {/* Fallback */}
             <Route

@@ -177,7 +177,30 @@ export const api = {
       ),
 
     // Translations
+    getAllTranslations: (filters?: { status?: string; search?: string; limit?: number; offset?: number }) => {
+      const q = new URLSearchParams();
+      if (filters?.status) q.set('status', filters.status);
+      if (filters?.search) q.set('search', filters.search);
+      if (filters?.limit) q.set('limit', filters.limit.toString());
+      if (filters?.offset) q.set('offset', filters.offset.toString());
+      return fetchJson<{ items: any[]; total: number }>(`/api/admin/translations?${q.toString()}`);
+    },
     getTranslations: (articleId: string) => fetchJson<ArticleTranslation[]>(`/api/admin/articles/${articleId}/translations`),
+    getTranslationWorkspace: (articleId: string) =>
+      fetchJson<{
+        article: Article;
+        uaTranslation: ArticleTranslation;
+        enTranslation: ArticleTranslation | null;
+        uaBlocks: any[];
+        enBlocks: any[];
+        sourceInfo: {
+          source_name: string;
+          source_url: string;
+          source_author: string;
+          source_published_at: string;
+          rights_status: string;
+        };
+      }>(`/api/admin/articles/${articleId}/translation-workspace`),
     saveTranslation: (articleId: string, data: Partial<ArticleTranslation>) =>
       fetchJson<ArticleTranslation>(`/api/admin/articles/${articleId}/translations`, {
         method: 'POST',
@@ -188,6 +211,36 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ targetLang })
       }),
+    translateBlock: (articleId: string, block: any, targetLang: 'uk' | 'en') =>
+      fetchJson<{ success: boolean; block: any }>(`/api/admin/articles/${articleId}/translate-block`, {
+        method: 'POST',
+        body: JSON.stringify({ block, targetLang })
+      }),
+    translateSeo: (articleId: string, meta: { title: string; description: string }, targetLang: 'uk' | 'en') =>
+      fetchJson<{ success: boolean; seo: { meta_title: string; meta_description: string } }>(
+        `/api/admin/articles/${articleId}/translate-seo`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ ...meta, targetLang })
+        }
+      ),
+    approveTranslation: (articleId: string, language: 'uk' | 'en') =>
+      fetchJson<{ success: boolean }>(`/api/admin/articles/${articleId}/approve-translation`, {
+        method: 'POST',
+        body: JSON.stringify({ language })
+      }),
+    rejectTranslation: (articleId: string, language: 'uk' | 'en', reason?: string) =>
+      fetchJson<{ success: boolean }>(`/api/admin/articles/${articleId}/reject-translation`, {
+        method: 'POST',
+        body: JSON.stringify({ language, reason })
+      }),
+    getArticlePreview: (articleId: string, lang: 'uk' | 'en' = 'uk') =>
+      fetchJson<{
+        article: Article & { blocks: any[]; metaTitle?: string; metaDesc?: string };
+        language: 'uk' | 'en';
+        isDraftPreview: boolean;
+        robotsMeta: string;
+      }>(`/api/admin/articles/${articleId}/preview?lang=${lang}`),
 
     // Changes & Diffs
     getChanges: (filters?: { status?: string; sourceId?: string; severity?: string; changeType?: string }) => {
