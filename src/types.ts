@@ -198,6 +198,8 @@ export interface Article {
   featured_image_url?: string;
   status: ArticleStatus;
   rights_status: 'original' | 'fair_use_rewritten' | 'syndicated' | 'press_release' | 'raw_imported';
+  article_type?: 'news' | 'review' | 'feature' | 'editorial';
+  review_score?: number;
   slug_uk: string;
   slug_en: string;
   views_count: number;
@@ -367,10 +369,60 @@ export interface AdSlot {
 
 export interface SocialLink {
   id: string;
-  platform: string;
+  platform: 'telegram' | 'youtube' | 'instagram' | 'facebook' | 'x' | 'tiktok' | 'discord' | string;
   url: string;
-  icon_name: string;
+  title?: string;
+  icon?: string;
+  icon_name?: string;
+  sort_order?: number;
   is_active: boolean;
+}
+
+export interface SiteElement {
+  id: string;
+  element_key: string;
+  name: string;
+  type: string;
+  section?: string;
+  content_uk?: string;
+  content_en?: string;
+  enabled: boolean;
+  is_active: boolean;
+  desktop: boolean;
+  tablet: boolean;
+  mobile: boolean;
+  order: number;
+  sort_order?: number;
+  settings: Record<string, any> | string;
+  updated_at?: string;
+}
+
+export type HomepageLayout =
+  | 'hero'
+  | 'grid'
+  | 'list'
+  | 'two-column'
+  | 'three-column'
+  | 'horizontal'
+  | 'compact';
+
+export type HomepageSortBy = 'latest' | 'popular' | 'trending' | 'title';
+
+export interface HomepageSection {
+  id: string;
+  title_uk: string;
+  title_en: string;
+  section_type: string;
+  category_id?: string | null;
+  layout: HomepageLayout;
+  article_count: number;
+  sort_by: HomepageSortBy;
+  desktop_visible: boolean;
+  mobile_visible: boolean;
+  config_json?: string;
+  sort_order: number;
+  is_active: boolean;
+  updated_at?: string;
 }
 
 export interface SeoSetting {

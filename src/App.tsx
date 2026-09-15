@@ -8,6 +8,13 @@ import { PublicFooter } from './components/layout/PublicFooter.tsx';
 import { HomePage } from './pages/public/HomePage.tsx';
 import { ArticlePage } from './pages/public/ArticlePage.tsx';
 import { CategoryPage } from './pages/public/CategoryPage.tsx';
+import { NewsPage } from './pages/public/NewsPage.tsx';
+import { ReviewsPage } from './pages/public/ReviewsPage.tsx';
+import { SearchPage } from './pages/public/SearchPage.tsx';
+import { AboutPage } from './pages/public/AboutPage.tsx';
+import { ContactPage } from './pages/public/ContactPage.tsx';
+import { PrivacyPage } from './pages/public/PrivacyPage.tsx';
+import { TermsPage } from './pages/public/TermsPage.tsx';
 
 // Admin pages
 import { LoginPage } from './pages/admin/LoginPage.tsx';
@@ -22,6 +29,8 @@ import { CategoriesPage } from './pages/admin/CategoriesPage.tsx';
 import { SettingsPage } from './pages/admin/SettingsPage.tsx';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage.tsx';
 import { TranslationsPage } from './pages/admin/TranslationsPage.tsx';
+import { HomepageBuilderPage } from './pages/admin/HomepageBuilderPage.tsx';
+import { SiteElementsPage } from './pages/admin/SiteElementsPage.tsx';
 
 import { api } from './api/client.ts';
 import { Category, Language } from './types.ts';
@@ -32,7 +41,6 @@ export function App() {
 
   const [currentLang, setCurrentLang] = useState<Language>('uk');
   const [categories, setCategories] = useState<Category[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
 
   // Synchronize language state if URL starts with /uk or /en
   useEffect(() => {
@@ -59,8 +67,6 @@ export function App() {
             categories={categories}
             currentLang={currentLang}
             onLanguageChange={setCurrentLang}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
           />
         )}
 
@@ -69,6 +75,8 @@ export function App() {
             {/* Admin CMS Routes */}
             <Route path="/admin/login" element={<LoginPage />} />
             <Route path="/admin" element={<DashboardPage />} />
+            <Route path="/admin/homepage" element={<HomepageBuilderPage />} />
+            <Route path="/admin/elements" element={<SiteElementsPage />} />
             <Route path="/admin/articles" element={<ArticlesListPage />} />
             <Route path="/admin/articles/new" element={<ArticleEditorPage />} />
             <Route path="/admin/articles/:id/edit" element={<ArticleEditorPage />} />
@@ -83,89 +91,48 @@ export function App() {
             <Route path="/admin/settings" element={<SettingsPage />} />
             <Route path="/admin/audit" element={<AuditLogsPage />} />
 
-            {/* Localized Public Routes */}
-            <Route
-              path="/uk"
-              element={<HomePage currentLang="uk" categories={categories} />}
-            />
-            <Route
-              path="/uk/"
-              element={<HomePage currentLang="uk" categories={categories} />}
-            />
-            <Route
-              path="/en"
-              element={<HomePage currentLang="en" categories={categories} />}
-            />
-            <Route
-              path="/en/"
-              element={<HomePage currentLang="en" categories={categories} />}
-            />
-            <Route
-              path="/uk/article/:slug"
-              element={
-                <ArticlePage
-                  currentLang="uk"
-                  onLanguageChange={setCurrentLang}
-                />
-              }
-            />
-            <Route
-              path="/en/article/:slug"
-              element={
-                <ArticlePage
-                  currentLang="en"
-                  onLanguageChange={setCurrentLang}
-                />
-              }
-            />
-            <Route
-              path="/uk/:category"
-              element={
-                <CategoryPage
-                  currentLang="uk"
-                  categories={categories}
-                />
-              }
-            />
-            <Route
-              path="/en/:category"
-              element={
-                <CategoryPage
-                  currentLang="en"
-                  categories={categories}
-                />
-              }
-            />
+            {/* Localized Public Routes: Ukrainian */}
+            <Route path="/uk" element={<HomePage currentLang="uk" categories={categories} />} />
+            <Route path="/uk/" element={<HomePage currentLang="uk" categories={categories} />} />
+            <Route path="/uk/news" element={<NewsPage currentLang="uk" categories={categories} />} />
+            <Route path="/uk/reviews" element={<ReviewsPage currentLang="uk" categories={categories} />} />
+            <Route path="/uk/search" element={<SearchPage currentLang="uk" categories={categories} />} />
+            <Route path="/uk/about" element={<AboutPage currentLang="uk" />} />
+            <Route path="/uk/contact" element={<ContactPage currentLang="uk" />} />
+            <Route path="/uk/privacy" element={<PrivacyPage currentLang="uk" />} />
+            <Route path="/uk/terms" element={<TermsPage currentLang="uk" />} />
+            <Route path="/uk/article/:slug" element={<ArticlePage currentLang="uk" onLanguageChange={setCurrentLang} />} />
+            <Route path="/uk/category/:slug" element={<CategoryPage currentLang="uk" categories={categories} />} />
+            <Route path="/uk/:category" element={<CategoryPage currentLang="uk" categories={categories} />} />
 
-            {/* Default Public Routes (Fallback / root) */}
-            <Route
-              path="/"
-              element={<HomePage currentLang={currentLang} categories={categories} />}
-            />
-            <Route
-              path="/article/:slug"
-              element={
-                <ArticlePage
-                  currentLang={currentLang}
-                  onLanguageChange={setCurrentLang}
-                />
-              }
-            />
-            <Route
-              path="/category/:slug"
-              element={
-                <CategoryPage
-                  currentLang={currentLang}
-                  categories={categories}
-                />
-              }
-            />
+            {/* Localized Public Routes: English */}
+            <Route path="/en" element={<HomePage currentLang="en" categories={categories} />} />
+            <Route path="/en/" element={<HomePage currentLang="en" categories={categories} />} />
+            <Route path="/en/news" element={<NewsPage currentLang="en" categories={categories} />} />
+            <Route path="/en/reviews" element={<ReviewsPage currentLang="en" categories={categories} />} />
+            <Route path="/en/search" element={<SearchPage currentLang="en" categories={categories} />} />
+            <Route path="/en/about" element={<AboutPage currentLang="en" />} />
+            <Route path="/en/contact" element={<ContactPage currentLang="en" />} />
+            <Route path="/en/privacy" element={<PrivacyPage currentLang="en" />} />
+            <Route path="/en/terms" element={<TermsPage currentLang="en" />} />
+            <Route path="/en/article/:slug" element={<ArticlePage currentLang="en" onLanguageChange={setCurrentLang} />} />
+            <Route path="/en/category/:slug" element={<CategoryPage currentLang="en" categories={categories} />} />
+            <Route path="/en/:category" element={<CategoryPage currentLang="en" categories={categories} />} />
+
+            {/* Unprefixed / Default Public Routes */}
+            <Route path="/" element={<HomePage currentLang={currentLang} categories={categories} />} />
+            <Route path="/news" element={<NewsPage currentLang={currentLang} categories={categories} />} />
+            <Route path="/reviews" element={<ReviewsPage currentLang={currentLang} categories={categories} />} />
+            <Route path="/search" element={<SearchPage currentLang={currentLang} categories={categories} />} />
+            <Route path="/about" element={<AboutPage currentLang={currentLang} />} />
+            <Route path="/contact" element={<ContactPage currentLang={currentLang} />} />
+            <Route path="/privacy" element={<PrivacyPage currentLang={currentLang} />} />
+            <Route path="/terms" element={<TermsPage currentLang={currentLang} />} />
+            <Route path="/article/:slug" element={<ArticlePage currentLang={currentLang} onLanguageChange={setCurrentLang} />} />
+            <Route path="/category/:slug" element={<CategoryPage currentLang={currentLang} categories={categories} />} />
 
             {/* Fallback */}
-            <Route
-              path="*"
-              element={<HomePage currentLang={currentLang} categories={categories} />}
-            />
+            <Route path="*" element={<HomePage currentLang={currentLang} categories={categories} />} />
           </Routes>
         </div>
 

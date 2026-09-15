@@ -740,9 +740,108 @@ adminRouter.post('/settings', (req: AuthenticatedRequest, res: Response) => {
   res.json({ success: true, key, value });
 });
 
+// ----------------------------------------------------
+// HOMEPAGE SECTIONS BUILDER
+// ----------------------------------------------------
 adminRouter.get('/homepage-sections', (req: AuthenticatedRequest, res: Response) => {
-  const sections = SettingsService.getHomepageSections();
+  const sections = SettingsService.getAllHomepageSections();
   res.json(sections);
+});
+
+adminRouter.post('/homepage-sections', (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const saved = SettingsService.saveHomepageSection(req.body);
+    AuditService.log({
+      userId: req.user!.id,
+      action: 'HOMEPAGE_SECTION_SAVED',
+      entityType: 'homepage_section',
+      entityId: saved.id,
+      newValues: { title_uk: saved.title_uk, layout: saved.layout, is_active: saved.is_active }
+    });
+    res.json({ success: true, section: saved });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to save section' });
+  }
+});
+
+adminRouter.delete('/homepage-sections/:id', (req: AuthenticatedRequest, res: Response) => {
+  try {
+    SettingsService.deleteHomepageSection(req.params.id);
+    AuditService.log({
+      userId: req.user!.id,
+      action: 'HOMEPAGE_SECTION_DELETED',
+      entityType: 'homepage_section',
+      entityId: req.params.id
+    });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to delete section' });
+  }
+});
+
+adminRouter.post('/homepage-sections/reorder', (req: AuthenticatedRequest, res: Response) => {
+  const ids = req.body.ids;
+  if (!Array.isArray(ids)) return res.status(400).json({ error: 'Array of ids is required' });
+
+  try {
+    SettingsService.reorderHomepageSections(ids);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ----------------------------------------------------
+// SITE ELEMENTS MANAGER
+// ----------------------------------------------------
+adminRouter.get('/site-elements', (req: AuthenticatedRequest, res: Response) => {
+  const elements = SettingsService.getAllSiteElements();
+  res.json(elements);
+});
+
+adminRouter.post('/site-elements', (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const saved = SettingsService.saveSiteElement(req.body);
+    AuditService.log({
+      userId: req.user!.id,
+      action: 'SITE_ELEMENT_SAVED',
+      entityType: 'site_element',
+      entityId: saved.id,
+      newValues: { name: saved.name, enabled: saved.enabled }
+    });
+    res.json({ success: true, element: saved });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to save site element' });
+  }
+});
+
+adminRouter.put('/site-elements/:id/toggle', (req: AuthenticatedRequest, res: Response) => {
+  const enabled = Boolean(req.body.enabled);
+  try {
+    SettingsService.toggleSiteElement(req.params.id, enabled);
+    AuditService.log({
+      userId: req.user!.id,
+      action: 'SITE_ELEMENT_TOGGLED',
+      entityType: 'site_element',
+      entityId: req.params.id,
+      newValues: { enabled }
+    });
+    res.json({ success: true, enabled });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+adminRouter.post('/site-elements/reorder', (req: AuthenticatedRequest, res: Response) => {
+  const ids = req.body.ids;
+  if (!Array.isArray(ids)) return res.status(400).json({ error: 'Array of ids is required' });
+
+  try {
+    SettingsService.reorderSiteElements(ids);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ----------------------------------------------------
@@ -767,8 +866,49 @@ adminRouter.get('/social-links', (req: AuthenticatedRequest, res: Response) => {
 });
 
 adminRouter.post('/social-links', (req: AuthenticatedRequest, res: Response) => {
-  SettingsService.saveSocialLink(req.body);
-  res.json({ success: true });
+  try {
+    const saved = SettingsService.saveSocialLink(req.body);
+    AuditService.log({
+      userId: req.user!.id,
+      action: 'SOCIAL_LINK_SAVED',
+      entityType: 'social_link',
+      entityId: saved.id,
+      newValues: { platform: saved.platform, url: saved.url }
+    });
+    res.json({ success: true, link: saved });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+adminRouter.post('/social-links/batch', (req: AuthenticatedRequest, res: Response) => {
+  const items = req.body.links;
+  if (!Array.isArray(items)) return res.status(400).json({ error: 'Links array is required' });
+
+  try {
+    for (const item of items) {
+      SettingsService.saveSocialLink(item);
+    }
+    AuditService.log({
+      userId: req.user!.id,
+      action: 'SOCIAL_LINKS_BATCH_UPDATED',
+      entityType: 'social_links',
+      entityId: 'all'
+    });
+    const all = SettingsService.getAllSocialLinks();
+    res.json({ success: true, links: all });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+adminRouter.delete('/social-links/:id', (req: AuthenticatedRequest, res: Response) => {
+  try {
+    SettingsService.deleteSocialLink(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ----------------------------------------------------

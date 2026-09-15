@@ -12,7 +12,9 @@ import {
   ExternalLink,
   Cpu,
   LogOut,
-  Languages
+  Languages,
+  LayoutTemplate,
+  Sliders
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.tsx';
 
@@ -27,6 +29,8 @@ export function AdminSidebar({ reviewCount = 0, changesCount = 0 }: AdminSidebar
 
   const navigation = [
     { name: 'Панель (Dashboard)', path: '/admin', icon: LayoutDashboard, exact: true },
+    { name: 'Конструктор головної', path: '/admin/homepage', icon: LayoutTemplate },
+    { name: 'Елементи сайту', path: '/admin/site-elements', icon: Sliders },
     { name: 'Статті & Редактор', path: '/admin/articles', icon: FileText },
     { name: 'Центр перекладів (UA/EN)', path: '/admin/translations', icon: Languages },
     {

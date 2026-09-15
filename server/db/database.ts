@@ -457,6 +457,23 @@ export function initDatabase() {
   migrateColumn('article_translations', 'reviewed_at TEXT');
   migrateColumn('article_translations', 'structured_blocks_json TEXT DEFAULT "[]"');
 
+  // Dynamic migrations for Site Elements & Homepage Builder
+  migrateColumn('site_elements', 'name TEXT');
+  migrateColumn('site_elements', 'type TEXT');
+  migrateColumn('site_elements', 'enabled INTEGER DEFAULT 1');
+  migrateColumn('site_elements', 'desktop INTEGER DEFAULT 1');
+  migrateColumn('site_elements', 'tablet INTEGER DEFAULT 1');
+  migrateColumn('site_elements', 'mobile INTEGER DEFAULT 1');
+  migrateColumn('site_elements', 'sort_order INTEGER DEFAULT 0');
+  migrateColumn('site_elements', 'settings TEXT DEFAULT "{}"');
+
+  migrateColumn('homepage_sections', 'category_id TEXT');
+  migrateColumn('homepage_sections', 'layout TEXT DEFAULT "grid"');
+  migrateColumn('homepage_sections', 'article_count INTEGER DEFAULT 6');
+  migrateColumn('homepage_sections', 'sort_by TEXT DEFAULT "latest"');
+  migrateColumn('homepage_sections', 'desktop_visible INTEGER DEFAULT 1');
+  migrateColumn('homepage_sections', 'mobile_visible INTEGER DEFAULT 1');
+
   seedData();
 }
 
@@ -652,17 +669,75 @@ function seedData() {
     insertSetting.run('contact_email', 'contact@techorbit.media', 'Editorial inquiries email', now);
   }
 
-  // 8. Social Links
-  const socialCount = db.prepare('SELECT count(*) as count FROM social_links').get() as { count: number };
-  if (socialCount.count === 0) {
-    const insertSocial = db.prepare(`
-      INSERT INTO social_links (id, platform, url, title, icon, sort_order, is_active, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 1, ?)
-    `);
-    insertSocial.run('soc_telegram', 'telegram', 'https://t.me/techorbit_media', 'Telegram Канал', 'Send', 1, now);
-    insertSocial.run('soc_youtube', 'youtube', 'https://youtube.com/@techorbit_media', 'YouTube Огляди', 'Youtube', 2, now);
-    insertSocial.run('soc_twitter', 'twitter', 'https://x.com/techorbit_media', 'X (Twitter)', 'Twitter', 3, now);
-    insertSocial.run('soc_github', 'github', 'https://github.com/techorbit-media', 'GitHub', 'Github', 4, now);
+  // 8. Social Links (Telegram, YouTube, Instagram, Facebook, X, TikTok, Discord)
+  const defaultSocials = [
+    { id: 'soc_telegram', platform: 'telegram', url: 'https://t.me/techorbit_media', title: 'Telegram Канал', icon: 'Send', order: 1 },
+    { id: 'soc_youtube', platform: 'youtube', url: 'https://youtube.com/@techorbit_media', title: 'YouTube Огляди', icon: 'Youtube', order: 2 },
+    { id: 'soc_instagram', platform: 'instagram', url: 'https://instagram.com/techorbit.media', title: 'Instagram Tech', icon: 'Instagram', order: 3 },
+    { id: 'soc_facebook', platform: 'facebook', url: 'https://facebook.com/techorbit.media', title: 'Facebook Page', icon: 'Facebook', order: 4 },
+    { id: 'soc_x', platform: 'x', url: 'https://x.com/techorbit_media', title: 'X (Twitter)', icon: 'Twitter', order: 5 },
+    { id: 'soc_tiktok', platform: 'tiktok', url: 'https://tiktok.com/@techorbit_media', title: 'TikTok Tech Shorts', icon: 'Video', order: 6 },
+    { id: 'soc_discord', platform: 'discord', url: 'https://discord.gg/techorbit', title: 'Discord Community', icon: 'MessageSquare', order: 7 }
+  ];
+
+  const insertSocial = db.prepare(`
+    INSERT OR IGNORE INTO social_links (id, platform, url, title, icon, sort_order, is_active, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+  `);
+  for (const s of defaultSocials) {
+    insertSocial.run(s.id, s.platform, s.url, s.title, s.icon, s.order, now);
+  }
+
+  // 8.1 Site Elements (16 configurable elements)
+  const defaultElements = [
+    { id: 'el_header', key: 'header', name: 'Header', type: 'navigation', sec: 'header', order: 1 },
+    { id: 'el_logo', key: 'logo', name: 'Logo', type: 'branding', sec: 'header', order: 2 },
+    { id: 'el_navigation', key: 'navigation', name: 'Navigation', type: 'navigation', sec: 'header', order: 3 },
+    { id: 'el_search', key: 'search', name: 'Search', type: 'search', sec: 'header', order: 4 },
+    { id: 'el_lang_switcher', key: 'language_switcher', name: 'Language Switcher', type: 'i18n', sec: 'header', order: 5 },
+    { id: 'el_top_ad', key: 'top_advertisement', name: 'Top Advertisement', type: 'advertising', sec: 'header', order: 6 },
+    { id: 'el_hero', key: 'hero', name: 'Hero', type: 'editorial', sec: 'main', order: 7 },
+    { id: 'el_latest', key: 'latest_articles', name: 'Latest Articles', type: 'feed', sec: 'main', order: 8 },
+    { id: 'el_popular', key: 'popular_articles', name: 'Popular Articles', type: 'feed', sec: 'main', order: 9 },
+    { id: 'el_category_sections', key: 'category_sections', name: 'Category Sections', type: 'taxonomy', sec: 'main', order: 10 },
+    { id: 'el_sidebar', key: 'sidebar', name: 'Sidebar', type: 'layout', sec: 'main', order: 11 },
+    { id: 'el_newsletter', key: 'newsletter', name: 'Newsletter', type: 'engagement', sec: 'footer', order: 12 },
+    { id: 'el_social', key: 'social_links', name: 'Social Links', type: 'social', sec: 'footer', order: 13 },
+    { id: 'el_source_attrib', key: 'source_attribution', name: 'Source Attribution', type: 'compliance', sec: 'article', order: 14 },
+    { id: 'el_related', key: 'related_articles', name: 'Related Articles', type: 'recommendation', sec: 'article', order: 15 },
+    { id: 'el_footer', key: 'footer', name: 'Footer', type: 'navigation', sec: 'footer', order: 16 }
+  ];
+
+  const insertElement = db.prepare(`
+    INSERT OR IGNORE INTO site_elements (
+      id, element_key, name, type, section, content_uk, content_en, enabled, is_active,
+      desktop, tablet, mobile, sort_order, settings, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, 1, 1, 1, ?, '{}', ?)
+  `);
+  for (const el of defaultElements) {
+    insertElement.run(el.id, el.key, el.name, el.type, el.sec, el.name, el.name, el.order, now);
+  }
+
+  // 8.2 Modular Homepage Sections
+  const defaultHomepageSections = [
+    { id: 'sec_hero', uk: 'Головне сьогодні', en: 'Top Editorial Stories', type: 'hero', cat: null, layout: 'hero', count: 5, sort: 'latest', order: 1 },
+    { id: 'sec_latest_news', uk: 'Свіжі новини технологій', en: 'Latest Tech News', type: 'latest_news', cat: null, layout: 'two-column', count: 6, sort: 'latest', order: 2 },
+    { id: 'sec_featured', uk: 'Вибір редакції', en: 'Editor’s Picks', type: 'featured', cat: null, layout: 'grid', count: 3, sort: 'popular', order: 3 },
+    { id: 'sec_reviews', uk: 'Огляди та Лабораторні тести', en: 'In-Depth Reviews', type: 'reviews', cat: 'cat_gadgets', layout: 'three-column', count: 3, sort: 'latest', order: 4 },
+    { id: 'sec_popular', uk: 'Найбільш обговорюване', en: 'Trending & Popular', type: 'popular', cat: null, layout: 'horizontal', count: 4, sort: 'popular', order: 5 },
+    { id: 'sec_smartphones', uk: 'Смартфони та Мобільна ера', en: 'Smartphones & Mobile Tech', type: 'category_blocks', cat: 'cat_smartphones', layout: 'compact', count: 4, sort: 'latest', order: 6 },
+    { id: 'sec_newsletter', uk: 'Щотижневий дайджест TechOrbit', en: 'TechOrbit Weekly Digest', type: 'newsletter', cat: null, layout: 'grid', count: 0, sort: 'latest', order: 7 },
+    { id: 'sec_ad_banner', uk: 'Партнерський блок', en: 'Sponsored Feature', type: 'advertisement', cat: null, layout: 'grid', count: 0, sort: 'latest', order: 8 }
+  ];
+
+  const insertSection = db.prepare(`
+    INSERT OR IGNORE INTO homepage_sections (
+      id, title_uk, title_en, section_type, category_id, layout, article_count,
+      sort_by, desktop_visible, mobile_visible, config_json, sort_order, is_active, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, '{}', ?, 1, ?)
+  `);
+  for (const s of defaultHomepageSections) {
+    insertSection.run(s.id, s.uk, s.en, s.type, s.cat, s.layout, s.count, s.sort, s.order, now);
   }
 
   // 9. Ad Slots
@@ -973,26 +1048,349 @@ Retail units featuring these processors begin shipping worldwide this week.`;
       'author_editorial_techorbit',
       null,
       'https://images.unsplash.com/photo-1558441719-aa34455441cb?w=1200&h=680&fit=crop&q=80',
-      'IMPORTED',
-      'raw_imported',
+      'PUBLISHED',
+      'original',
       'solid-state-batteries-ev-reality',
       'solid-state-batteries-ev-reality',
       now,
       now,
-      null,
+      now,
       now,
       'hash_ev_solid_v1'
     );
 
-    insertVersion.run(
-      'ver_ev_1',
+    insertTrans.run(
+      'trans_ev_uk',
       art3Id,
-      1,
+      'uk',
       art3TitleUk,
+      'Революція запасу ходу та безпеки',
       art3ExcerptUk,
-      art3ExcerptUk,
-      'system',
-      'Source ingestion',
+      'Твердотільні електроліти замінюють традиційні рідкі розчини, пропонуючи значно вищу енергетичну щільність та відсутність ризику загоряння. Провідні автовиробники, включаючи Toyota, QuantumScape та BMW, уже проводять дорожні випробування тестових прототипів з пробігом понад 1000 км на одному заряді.',
+      'solid-state-batteries-ev-reality',
+      'approved',
+      0,
+      'user_admin_initial',
+      now
+    );
+
+    insertTrans.run(
+      'trans_ev_en',
+      art3Id,
+      'en',
+      art3TitleEn,
+      'A revolution in range and safety',
+      art3ExcerptEn,
+      'Solid-state electrolytes replace volatile liquid solutions, providing dramatically higher volumetric energy density and near-zero thermal runaway risk. Tier-one automakers including Toyota, QuantumScape, and BMW are actively road-testing pre-production prototypes achieving over 600 miles on a single charge.',
+      'solid-state-batteries-ev-reality',
+      'approved',
+      1,
+      'user_admin_initial',
+      now
+    );
+
+    // Article 4: Review - Samsung Galaxy S26 Ultra
+    const art4Id = 'art_samsung_s26_ultra';
+    insertArticle.run(
+      art4Id,
+      null,
+      null,
+      null,
+      'Михайло Орлов',
+      now,
+      'Огляд Samsung Galaxy S26 Ultra: новий еталон мобільної фотографії та вбудованого ШІ',
+      '10-кратний перископ, титановий корпус та надшвидкий Snapdragon 8 Gen 5',
+      'Детальний тест флагмана: екран без відблисків, автономність понад 14 годин та нові можливості Galaxy AI з локальною обробкою запитів.',
+      'Samsung Galaxy S26 Ultra демонструє пікову зрілість лінійки Ultra. Нове антиблікове скло Gorilla Glass Armor 2 повністю прибирає віддзеркалення сонця, а новий сенсор камери на 200 Мп з оптикою f/1.6 забезпечує надзвичайну деталізацію нічних кадрів.',
+      'cat_smartphones',
+      'author_mykhailo',
+      null,
+      'https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=1200&h=680&fit=crop&q=80',
+      'PUBLISHED',
+      'original',
+      'samsung-galaxy-s26-ultra-review',
+      'samsung-galaxy-s26-ultra-review',
+      now,
+      now,
+      now,
+      now,
+      'hash_s26_v1'
+    );
+    try {
+      db.prepare("UPDATE articles SET article_type = 'review', review_score = 9.4, views_count = 4320 WHERE id = ?").run(art4Id);
+    } catch {}
+
+    insertTrans.run(
+      'trans_s26_uk',
+      art4Id,
+      'uk',
+      'Огляд Samsung Galaxy S26 Ultra: новий еталон мобільної фотографії та вбудованого ШІ',
+      '10-кратний перископ, титановий корпус та надшвидкий Snapdragon 8 Gen 5',
+      'Детальний тест флагмана: екран без відблисків, автономність понад 14 годин та нові можливості Galaxy AI з локальною обробкою запитів.',
+      'Samsung Galaxy S26 Ultra демонструє пікову зрілість лінійки Ultra. Нове антиблікове скло Gorilla Glass Armor 2 повністю прибирає віддзеркалення сонця, а новий сенсор камери на 200 Мп з оптикою f/1.6 забезпечує надзвичайну деталізацію нічних кадрів.',
+      'samsung-galaxy-s26-ultra-review',
+      'approved',
+      0,
+      'user_admin_initial',
+      now
+    );
+
+    insertTrans.run(
+      'trans_s26_en',
+      art4Id,
+      'en',
+      'Samsung Galaxy S26 Ultra In-Depth Review: The Benchmark for Mobile Photography and Local AI',
+      '10x Periscope zoom, refined titanium chassis and cutting-edge Snapdragon 8 Gen 5',
+      'Comprehensive testing of Samsung’s supreme flagship: anti-reflective display mastery, 14+ hours of active battery life, and latency-free on-device Galaxy AI.',
+      'The Samsung Galaxy S26 Ultra represents peak mobile refinement. With next-generation Gorilla Glass Armor 2 eliminating reflections and an overhauled 200MP optical array, it sets an undeniable gold standard for power users.',
+      'samsung-galaxy-s26-ultra-review',
+      'approved',
+      1,
+      'user_admin_initial',
+      now
+    );
+
+    // Article 5: Review - Apple Vision Air
+    const art5Id = 'art_apple_vision_air';
+    insertArticle.run(
+      art5Id,
+      null,
+      null,
+      null,
+      'Михайло Орлов',
+      now,
+      'Огляд Apple Vision Air: чи став полегшений просторовий комп’ютер масовим продуктом',
+      'Мінус 200 грамів ваги, ціна утричі нижча та оновлена visionOS 3',
+      'Два тижні щоденної роботи та перегляду медіа у просторовій гарнітурі: ергономіка, мікро-OLED дисплеї та нові сценарії багатовіконності.',
+      'Apple прислухалася до критиків оригінального Vision Pro: прибравши зовнішній екран EyeSight та оптимізувавши магнієву раму, інженерам вдалося знизити вагу до 380 грамів. Тепер гарнітуру можна комфортно носити годинами без втоми шиї.',
+      'cat_gadgets',
+      'author_mykhailo',
+      null,
+      'https://images.unsplash.com/photo-1593508512255-86ab42a8e620?w=1200&h=680&fit=crop&q=80',
+      'PUBLISHED',
+      'original',
+      'apple-vision-air-review',
+      'apple-vision-air-review',
+      now,
+      now,
+      now,
+      now,
+      'hash_vair_v1'
+    );
+    try {
+      db.prepare("UPDATE articles SET article_type = 'review', review_score = 9.1, views_count = 7850 WHERE id = ?").run(art5Id);
+    } catch {}
+
+    insertTrans.run(
+      'trans_vair_uk',
+      art5Id,
+      'uk',
+      'Огляд Apple Vision Air: чи став полегшений просторовий комп’ютер масовим продуктом',
+      'Мінус 200 грамів ваги, ціна утричі нижча та оновлена visionOS 3',
+      'Два тижні щоденної роботи та перегляду медіа у просторовій гарнітурі: ергономіка, мікро-OLED дисплеї та нові сценарії багатовіконності.',
+      'Apple прислухалася до критиків оригінального Vision Pro: прибравши зовнішній екран EyeSight та оптимізувавши магнієву раму, інженерам вдалося знизити вагу до 380 грамів.',
+      'apple-vision-air-review',
+      'approved',
+      0,
+      'user_admin_initial',
+      now
+    );
+
+    insertTrans.run(
+      'trans_vair_en',
+      art5Id,
+      'en',
+      'Apple Vision Air In-Depth Review: Has Spatial Computing Finally Found Its Mass Audience?',
+      '200 grams lighter, three times more accessible, powered by visionOS 3',
+      'Two weeks of intensive daily workflows and cinematic viewing inside Apple’s lightweight spatial computer: comfort, micro-OLED clarity, and Mac virtual display integration.',
+      'Apple clearly listened to feedback on the pioneering Vision Pro. By shaving off the heavy EyeSight outer panel and designing a featherweight magnesium frame, total weight dropped to 380 grams.',
+      'apple-vision-air-review',
+      'approved',
+      1,
+      'user_admin_initial',
+      now
+    );
+
+    // Article 6: News - Nvidia Blackwell Ultra
+    const art6Id = 'art_nvidia_blackwell';
+    insertArticle.run(
+      art6Id,
+      null,
+      null,
+      null,
+      'Редакція TechOrbit',
+      now,
+      'Архітектура Nvidia Blackwell Ultra: як нові тензорні ядра змінюють швидкість навчання ШІ',
+      'FP4 обчислення, рідинне охолодження серверів та 30-кратний приріст у виведенні',
+      'Технічний розбір архітектури Blackwell: пропускна здатність NVLink 5, пам’ять HBM3e та енергетична ефективність нового кремнієвого гіганта.',
+      'Nvidia офіційно представила повні специфікації платформи Blackwell Ultra. Завдяки з’єднанню двох кристалів через надшвидкісний міст зі швидкістю 10 ТБ/с, система здатна обробляти трильйонні параметри мовних моделей без затримок пам’яті.',
+      'cat_ai_software',
+      'author_editorial_techorbit',
+      null,
+      'https://images.unsplash.com/photo-1591488320449-011701bb6704?w=1200&h=680&fit=crop&q=80',
+      'PUBLISHED',
+      'original',
+      'nvidia-blackwell-ultra-architecture',
+      'nvidia-blackwell-ultra-architecture',
+      now,
+      now,
+      now,
+      now,
+      'hash_bwell_v1'
+    );
+    try {
+      db.prepare("UPDATE articles SET article_type = 'news', views_count = 3410 WHERE id = ?").run(art6Id);
+    } catch {}
+
+    insertTrans.run(
+      'trans_bwell_uk',
+      art6Id,
+      'uk',
+      'Архітектура Nvidia Blackwell Ultra: як нові тензорні ядра змінюють швидкість навчання ШІ',
+      'FP4 обчислення, рідинне охолодження серверів та 30-кратний приріст у виведенні',
+      'Технічний розбір архітектури Blackwell: пропускна здатність NVLink 5, пам’ять HBM3e та енергетична ефективність нового кремнієвого гіганта.',
+      'Nvidia офіційно представила повні специфікації платформи Blackwell Ultra. Завдяки з’єднанню двох кристалів через надшвидкісний міст зі швидкістю 10 ТБ/с, система здатна обробляти трильйонні параметри мовних моделей без затримок пам’яті.',
+      'nvidia-blackwell-ultra-architecture',
+      'approved',
+      0,
+      'user_admin_initial',
+      now
+    );
+
+    insertTrans.run(
+      'trans_bwell_en',
+      art6Id,
+      'en',
+      'Nvidia Blackwell Ultra Architecture: How Next-Gen Tensor Cores Reshape Frontier AI',
+      'FP4 tensor micro-scaling, liquid-cooled rack infrastructure, and 30x inference gains',
+      'A deep engineering breakdown of Blackwell: NVLink 5 bi-directional bandwidth, HBM3e density, and silicon-level energy efficiency.',
+      'Nvidia released complete silicon specifications for the Blackwell Ultra architecture. Combining two massive dies across a 10 TB/s interconnect, the chip effortlessly accommodates multi-trillion parameter neural networks.',
+      'nvidia-blackwell-ultra-architecture',
+      'approved',
+      1,
+      'user_admin_initial',
+      now
+    );
+
+    // Article 7: Review - Sonos Ace 2
+    const art7Id = 'art_sonos_ace_2';
+    insertArticle.run(
+      art7Id,
+      null,
+      null,
+      null,
+      'Редакція TechOrbit',
+      now,
+      'Огляд Sonos Ace 2: бездротові навушники з бездоганним звуком та Wi-Fi Lossless',
+      'Виправлення дитячих хвороб першого покоління та миттєвий Sound Swap з телевізором',
+      'Порівняння з AirPods Max та Sony WH-1000XM5: якість активного шумозаглушення, мікрофони для дзвінків та новий динамічний еквалайзер TrueCinema.',
+      'Sonos Ace 2 отримали оновлений 40-мм динамічний драйвер зі спеціальною берилієвою діафрагмою. Звучання стало помітно відкритішим, з винятково швидкими транзієнтами та глибоким текстурованим басом.',
+      'cat_audio',
+      'author_editorial_techorbit',
+      null,
+      'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=1200&h=680&fit=crop&q=80',
+      'PUBLISHED',
+      'original',
+      'sonos-ace-2-headphones-review',
+      'sonos-ace-2-headphones-review',
+      now,
+      now,
+      now,
+      now,
+      'hash_sonos_v1'
+    );
+    try {
+      db.prepare("UPDATE articles SET article_type = 'review', review_score = 8.9, views_count = 2190 WHERE id = ?").run(art7Id);
+    } catch {}
+
+    insertTrans.run(
+      'trans_sonos_uk',
+      art7Id,
+      'uk',
+      'Огляд Sonos Ace 2: бездротові навушники з бездоганним звуком та Wi-Fi Lossless',
+      'Виправлення дитячих хвороб першого покоління та миттєвий Sound Swap з телевізором',
+      'Порівняння з AirPods Max та Sony WH-1000XM5: якість активного шумозаглушення, мікрофони для дзвінків та новий динамічний еквалайзер TrueCinema.',
+      'Sonos Ace 2 отримали оновлений 40-мм динамічний драйвер зі спеціальною берилієвою діафрагмою.',
+      'sonos-ace-2-headphones-review',
+      'approved',
+      0,
+      'user_admin_initial',
+      now
+    );
+
+    insertTrans.run(
+      'trans_sonos_en',
+      art7Id,
+      'en',
+      'Sonos Ace 2 Headphones Review: Audiophile Wireless Sound and Seamless Wi-Fi Lossless',
+      'Refined second-generation acoustic tuning and instant TV Sound Swap',
+      'Head-to-head comparison with AirPods Max and Sony WH-1000XM5: noise cancellation, dual-beamforming voice isolation, and TrueCinema spatial tracking.',
+      'The Sonos Ace 2 features an upgraded 40mm custom beryllium transducer. Acoustically, the presentation is expansive, resolving minute micro-details with punchy, controlled low-end authority.',
+      'sonos-ace-2-headphones-review',
+      'approved',
+      1,
+      'user_admin_initial',
+      now
+    );
+
+    // Article 8: News - Steam Deck 2 OLED
+    const art8Id = 'art_steam_deck_2_oled';
+    insertArticle.run(
+      art8Id,
+      null,
+      null,
+      null,
+      'Михайло Орлов',
+      now,
+      'Steam Deck 2 OLED: витік характеристик та перші бенчмарки кастомного чипа AMD',
+      'Zen 5 + RDNA 3.5, 120 Гц VRR дисплей та підтримка швидкого Wi-Fi 7',
+      'Valve готує нове покоління портативної консолі зі значним приростом енергоефективності та стабільними 60 FPS у Cyberpunk 2077 на високих налаштуваннях.',
+      'Згідно з витоками з митної бази даних, Valve тестує інженерний зразок з процесором AMD під кодовою назвою "Sephiroth 2". Чип поєднує 6 ядер Zen 5 з 16 обчислювальними блоками RDNA 3.5 при TDP до 22 Вт.',
+      'cat_gaming',
+      'author_mykhailo',
+      null,
+      'https://images.unsplash.com/photo-1612287233207-6b45f4df21fb?w=1200&h=680&fit=crop&q=80',
+      'PUBLISHED',
+      'original',
+      'steam-deck-2-oled-specs-leak',
+      'steam-deck-2-oled-specs-leak',
+      now,
+      now,
+      now,
+      now,
+      'hash_sdeck_v1'
+    );
+    try {
+      db.prepare("UPDATE articles SET article_type = 'news', views_count = 5620 WHERE id = ?").run(art8Id);
+    } catch {}
+
+    insertTrans.run(
+      'trans_sdeck_uk',
+      art8Id,
+      'uk',
+      'Steam Deck 2 OLED: витік характеристик та перші бенчмарки кастомного чипа AMD',
+      'Zen 5 + RDNA 3.5, 120 Гц VRR дисплей та підтримка швидкого Wi-Fi 7',
+      'Valve готує нове покоління портативної консолі зі значним приростом енергоефективності та стабільними 60 FPS у Cyberpunk 2077 на високих налаштуваннях.',
+      'Згідно з витоками з митної бази даних, Valve тестує інженерний зразок з процесором AMD під кодовою назвою "Sephiroth 2".',
+      'steam-deck-2-oled-specs-leak',
+      'approved',
+      0,
+      'user_admin_initial',
+      now
+    );
+
+    insertTrans.run(
+      'trans_sdeck_en',
+      art8Id,
+      'en',
+      'Steam Deck 2 OLED: Leaked Specifications and Early Benchmarks of AMD’s Custom APU',
+      'Zen 5 cores, RDNA 3.5 graphics, 120Hz Variable Refresh Display, and Wi-Fi 7',
+      'Valve is engineering its next-generation handheld with massive thermal headroom and a projected 60 FPS lock in demanding AAA titles.',
+      'Customs manifests disclose that Valve is actively validating engineering test boards equipped with AMD silicon codenamed "Sephiroth 2", combining 6 Zen 5 cores with 16 RDNA 3.5 Compute Units at up to 22W TDP.',
+      'steam-deck-2-oled-specs-leak',
+      'approved',
+      1,
+      'user_admin_initial',
       now
     );
 
@@ -1013,7 +1411,7 @@ Retail units featuring these processors begin shipping worldwide this week.`;
       now
     );
 
-    // Add a sample notification
+    // Add sample notifications
     const insertNotif = db.prepare(`
       INSERT INTO notifications (id, type, title, message, link, read, created_at)
       VALUES (?, ?, ?, ?, ?, 0, ?)

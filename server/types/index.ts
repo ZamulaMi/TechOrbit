@@ -168,6 +168,8 @@ export interface Article {
   featured_image_url?: string | null;
   status: ArticleStatus;
   rights_status: string;
+  article_type?: 'news' | 'review' | 'feature' | 'editorial';
+  review_score?: number;
   slug_uk: string;
   slug_en: string;
   created_at: string;
@@ -390,18 +392,44 @@ export interface SiteSetting {
 export interface SiteElement {
   id: string;
   element_key: string;
-  section: string;
-  content_uk: string;
-  content_en: string;
+  name: string;
+  type: string;
+  section?: string;
+  content_uk?: string;
+  content_en?: string;
+  enabled: boolean;
   is_active: boolean;
+  desktop: boolean;
+  tablet: boolean;
+  mobile: boolean;
+  order: number;
+  sort_order?: number;
+  settings: Record<string, any> | string;
   updated_at: string;
 }
+
+export type HomepageLayout =
+  | 'hero'
+  | 'grid'
+  | 'list'
+  | 'two-column'
+  | 'three-column'
+  | 'horizontal'
+  | 'compact';
+
+export type HomepageSortBy = 'latest' | 'popular' | 'trending' | 'title';
 
 export interface HomepageSection {
   id: string;
   title_uk: string;
   title_en: string;
-  section_type: 'hero' | 'featured_grid' | 'trending_ticker' | 'category_feed' | 'editor_picks' | 'newsletter_bar';
+  section_type: string;
+  category_id?: string | null;
+  layout: HomepageLayout;
+  article_count: number;
+  sort_by: HomepageSortBy;
+  desktop_visible: boolean;
+  mobile_visible: boolean;
   config_json: string;
   sort_order: number;
   is_active: boolean;
@@ -410,7 +438,7 @@ export interface HomepageSection {
 
 export interface SocialLink {
   id: string;
-  platform: string;
+  platform: 'telegram' | 'youtube' | 'instagram' | 'facebook' | 'x' | 'tiktok' | 'discord' | string;
   url: string;
   title: string;
   icon: string;

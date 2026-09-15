@@ -23,11 +23,14 @@ export class ArticleService {
 
   static getPublicArticles(options: {
     categorySlug?: string;
+    categoryId?: string;
     tagSlug?: string;
     lang?: Language;
     limit?: number;
     offset?: number;
     search?: string;
+    type?: 'news' | 'review' | 'all';
+    sortBy?: 'latest' | 'popular' | 'trending' | 'title';
   } = {}): { articles: Article[]; total: number } {
     const lang = options.lang || 'uk';
     const limit = options.limit || 12;
@@ -39,6 +42,19 @@ export class ArticleService {
     if (options.categorySlug) {
       whereClause += ' AND (c.slug_uk = ? OR c.slug_en = ?)';
       params.push(options.categorySlug, options.categorySlug);
+    }
+
+    if (options.categoryId) {
+      whereClause += ' AND a.category_id = ?';
+      params.push(options.categoryId);
+    }
+
+    if (options.type && options.type !== 'all') {
+      if (options.type === 'review') {
+        whereClause += " AND (a.article_type = 'review' OR LOWER(a.title) LIKE '%огляд%' OR LOWER(a.title) LIKE '%review%')";
+      } else if (options.type === 'news') {
+        whereClause += " AND (a.article_type = 'news' OR (a.article_type IS NULL AND LOWER(a.title) NOT LIKE '%огляд%' AND LOWER(a.title) NOT LIKE '%review%'))";
+      }
     }
 
     if (options.search) {
@@ -54,6 +70,13 @@ export class ArticleService {
       ${whereClause}
     `;
     const total = (db.prepare(countSql).get(...params) as { count: number }).count;
+
+    let orderClause = 'ORDER BY a.published_at DESC, a.created_at DESC';
+    if (options.sortBy === 'popular' || options.sortBy === 'trending') {
+      orderClause = 'ORDER BY a.views_count DESC, a.published_at DESC';
+    } else if (options.sortBy === 'title') {
+      orderClause = 'ORDER BY title ASC';
+    }
 
     const querySql = `
       SELECT
@@ -71,12 +94,117 @@ export class ArticleService {
       LEFT JOIN sources s ON s.id = a.source_id
       LEFT JOIN article_translations te ON te.article_id = a.id AND te.language = 'en' AND '${lang}' = 'en'
       ${whereClause}
-      ORDER BY a.published_at DESC, a.created_at DESC
+      ${orderClause}
       LIMIT ? OFFSET ?
     `;
 
     const articles = db.prepare(querySql).all(...params, limit, offset) as unknown as Article[];
     return { articles, total };
+  }
+
+  static getRelatedArticles(articleId: string, limit: number = 4, lang: Language = 'uk'): Article[] {
+    const current = db.prepare('SELECT id, category_id, title FROM articles WHERE id = ?').get(articleId) as any;
+    if (!current) return [];
+
+    const categoryId = current.category_id;
+    const sql = `
+      SELECT
+        a.*,
+        COALESCE(te.title, a.title) as title,
+        COALESCE(te.excerpt, a.excerpt) as excerpt,
+        COALESCE(te.slug, a.slug_en) as slug_en,
+        c.name_uk as category_name_uk,
+        c.name_en as category_name_en,
+        au.name as author_name
+      FROM articles a
+      LEFT JOIN categories c ON c.id = a.category_id
+      LEFT JOIN authors au ON au.id = a.author_id
+      LEFT JOIN article_translations te ON te.article_id = a.id AND te.language = 'en' AND '${lang}' = 'en'
+      WHERE a.id != ? AND a.status IN ('APPROVED', 'PUBLISHED')
+      ORDER BY (CASE WHEN a.category_id = ? THEN 1 ELSE 2 END), a.published_at DESC
+      LIMIT ?
+    `;
+
+    return db.prepare(sql).all(articleId, categoryId, limit) as unknown as Article[];
+  }
+
+  static searchPublicArticles(options: {
+    query: string;
+    lang?: Language;
+    limit?: number;
+    offset?: number;
+  }): { articles: Article[]; total: number; query: string } {
+    const lang = options.lang || 'uk';
+    const limit = options.limit || 20;
+    const offset = options.offset || 0;
+    const q = (options.query || '').trim();
+
+    if (!q) {
+      return { articles: [], total: 0, query: '' };
+    }
+
+    const term = `%${q}%`;
+    const countSql = `
+      SELECT count(DISTINCT a.id) as count
+      FROM articles a
+      LEFT JOIN categories c ON c.id = a.category_id
+      LEFT JOIN article_translations t ON t.article_id = a.id
+      WHERE a.status IN ('APPROVED', 'PUBLISHED')
+        AND (
+          a.title LIKE ? OR a.subtitle LIKE ? OR a.excerpt LIKE ? OR a.content LIKE ? OR a.tags_json LIKE ?
+          OR c.name_uk LIKE ? OR c.name_en LIKE ?
+          OR t.title LIKE ? OR t.excerpt LIKE ? OR t.content LIKE ?
+        )
+    `;
+
+    const total = (db.prepare(countSql).get(
+      term, term, term, term, term,
+      term, term,
+      term, term, term
+    ) as { count: number }).count;
+
+    const querySql = `
+      SELECT DISTINCT
+        a.*,
+        COALESCE(te.title, a.title) as title,
+        COALESCE(te.excerpt, a.excerpt) as excerpt,
+        COALESCE(te.slug, a.slug_en) as slug_en,
+        c.name_uk as category_name_uk,
+        c.name_en as category_name_en,
+        au.name as author_name,
+        s.name as source_name
+      FROM articles a
+      LEFT JOIN categories c ON c.id = a.category_id
+      LEFT JOIN authors au ON au.id = a.author_id
+      LEFT JOIN sources s ON s.id = a.source_id
+      LEFT JOIN article_translations te ON te.article_id = a.id AND te.language = 'en' AND '${lang}' = 'en'
+      LEFT JOIN article_translations tsearch ON tsearch.article_id = a.id
+      WHERE a.status IN ('APPROVED', 'PUBLISHED')
+        AND (
+          a.title LIKE ? OR a.subtitle LIKE ? OR a.excerpt LIKE ? OR a.content LIKE ? OR a.tags_json LIKE ?
+          OR c.name_uk LIKE ? OR c.name_en LIKE ?
+          OR tsearch.title LIKE ? OR tsearch.excerpt LIKE ? OR tsearch.content LIKE ?
+        )
+      ORDER BY
+        (CASE
+          WHEN LOWER(a.title) LIKE LOWER(?) THEN 1
+          WHEN LOWER(te.title) LIKE LOWER(?) THEN 1
+          WHEN LOWER(a.excerpt) LIKE LOWER(?) THEN 2
+          ELSE 3
+        END) ASC,
+        a.published_at DESC
+      LIMIT ? OFFSET ?
+    `;
+
+    const articles = db.prepare(querySql).all(
+      term, term, term, term, term,
+      term, term,
+      term, term, term,
+      term, term, term,
+      limit, offset
+    ) as unknown as Article[];
+
+    return { articles, total, query: q };
   }
 
   static getPublicArticleBySlug(slug: string, lang: Language = 'uk'): Article | null {

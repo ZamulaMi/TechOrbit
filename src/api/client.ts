@@ -64,21 +64,42 @@ export const api = {
 
   // Public
   public: {
-    getArticles: (params?: { category?: string; tag?: string; lang?: Language; limit?: number; offset?: number; search?: string }) => {
+    getArticles: (params?: { category?: string; categoryId?: string; tag?: string; lang?: Language; limit?: number; offset?: number; search?: string; type?: 'news' | 'review' | 'all'; sortBy?: 'latest' | 'popular' | 'trending' | 'title' }) => {
       const query = new URLSearchParams();
       if (params?.category) query.set('category', params.category);
+      if (params?.categoryId) query.set('categoryId', params.categoryId);
       if (params?.tag) query.set('tag', params.tag);
       if (params?.lang) query.set('lang', params.lang);
       if (params?.limit) query.set('limit', params.limit.toString());
       if (params?.offset) query.set('offset', params.offset.toString());
       if (params?.search) query.set('search', params.search);
+      if (params?.type) query.set('type', params.type);
+      if (params?.sortBy) query.set('sortBy', params.sortBy);
       return fetchJson<{ articles: Article[]; total: number }>(`/api/public/articles?${query.toString()}`);
     },
+    search: (query: string, lang: Language = 'uk', limit: number = 20, offset: number = 0) => {
+      const q = new URLSearchParams();
+      q.set('q', query);
+      q.set('lang', lang);
+      q.set('limit', limit.toString());
+      q.set('offset', offset.toString());
+      return fetchJson<{ articles: Article[]; total: number; query: string }>(`/api/public/search?${q.toString()}`);
+    },
+    getRelated: (articleId: string, limit: number = 4, lang: Language = 'uk') =>
+      fetchJson<Article[]>(`/api/public/related/${articleId}?limit=${limit}&lang=${lang}`),
     getArticle: (slug: string, lang: Language = 'uk') =>
       fetchJson<{ article: Article; translations: ArticleTranslation[]; jsonLd: any }>(`/api/public/articles/${slug}?lang=${lang}`),
     getCategories: () => fetchJson<Category[]>('/api/public/categories'),
     getSettings: () =>
-      fetchJson<{ settings: Record<string, string>; socialLinks: SocialLink[]; homepageSections: any[] }>('/api/public/settings'),
+      fetchJson<{ settings: Record<string, string>; socialLinks: SocialLink[]; homepageSections: any[]; siteElements: any[] }>('/api/public/settings'),
+    getSiteElements: () => fetchJson<any[]>('/api/public/site-elements'),
+    getSocialLinks: () => fetchJson<SocialLink[]>('/api/public/social-links'),
+    getHomepageSections: () => fetchJson<any[]>('/api/public/homepage-sections'),
+    subscribeNewsletter: (email: string) =>
+      fetchJson<{ success: boolean; message: string }>('/api/public/newsletter', {
+        method: 'POST',
+        body: JSON.stringify({ email })
+      }),
     getAds: () => fetchJson<AdSlot[]>('/api/public/ads'),
     getSeo: (pageType: string) => fetchJson<SeoSetting | null>(`/api/public/seo/${pageType}`)
   },
@@ -363,6 +384,43 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ key, value })
       }),
+    
+    // Homepage Sections
+    getHomepageSections: () => fetchJson<any[]>('/api/admin/homepage-sections'),
+    saveHomepageSection: (data: any) =>
+      fetchJson<{ success: boolean; section: any }>('/api/admin/homepage-sections', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+    deleteHomepageSection: (id: string) =>
+      fetchJson<{ success: boolean }>(`/api/admin/homepage-sections/${id}`, {
+        method: 'DELETE'
+      }),
+    reorderHomepageSections: (ids: string[]) =>
+      fetchJson<{ success: boolean }>('/api/admin/homepage-sections/reorder', {
+        method: 'POST',
+        body: JSON.stringify({ ids })
+      }),
+
+    // Site Elements
+    getSiteElements: () => fetchJson<any[]>('/api/admin/site-elements'),
+    saveSiteElement: (data: any) =>
+      fetchJson<{ success: boolean; element: any }>('/api/admin/site-elements', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+    toggleSiteElement: (id: string, enabled: boolean) =>
+      fetchJson<{ success: boolean; enabled: boolean }>(`/api/admin/site-elements/${id}/toggle`, {
+        method: 'PUT',
+        body: JSON.stringify({ enabled })
+      }),
+    reorderSiteElements: (ids: string[]) =>
+      fetchJson<{ success: boolean }>('/api/admin/site-elements/reorder', {
+        method: 'POST',
+        body: JSON.stringify({ ids })
+      }),
+
+    // Ads & Social
     getAds: () => fetchJson<AdSlot[]>('/api/admin/ads'),
     updateAd: (id: string, data: Partial<AdSlot>) =>
       fetchJson<{ success: boolean }>(`/api/admin/ads/${id}`, {
@@ -371,9 +429,18 @@ export const api = {
       }),
     getSocialLinks: () => fetchJson<SocialLink[]>('/api/admin/social-links'),
     saveSocialLink: (data: Partial<SocialLink>) =>
-      fetchJson<{ success: boolean }>('/api/admin/social-links', {
+      fetchJson<{ success: boolean; link?: SocialLink }>('/api/admin/social-links', {
         method: 'POST',
         body: JSON.stringify(data)
+      }),
+    saveSocialLinksBatch: (links: Partial<SocialLink>[]) =>
+      fetchJson<{ success: boolean; links: SocialLink[] }>('/api/admin/social-links/batch', {
+        method: 'POST',
+        body: JSON.stringify({ links })
+      }),
+    deleteSocialLink: (id: string) =>
+      fetchJson<{ success: boolean }>(`/api/admin/social-links/${id}`, {
+        method: 'DELETE'
       }),
     getSeo: () => fetchJson<SeoSetting[]>('/api/admin/seo'),
     saveSeo: (data: Partial<SeoSetting>) =>
