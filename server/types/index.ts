@@ -170,6 +170,7 @@ export interface Article {
   rights_status: string;
   article_type?: 'news' | 'review' | 'feature' | 'editorial';
   review_score?: number;
+  views_count?: number;
   slug_uk: string;
   slug_en: string;
   created_at: string;

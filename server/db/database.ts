@@ -200,6 +200,9 @@ export function initDatabase() {
       published_at TEXT,
       last_source_check TEXT,
       source_content_hash TEXT,
+      article_type TEXT DEFAULT 'news',
+      review_score REAL,
+      views_count INTEGER DEFAULT 0,
       FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE SET NULL,
       FOREIGN KEY (source_article_id) REFERENCES source_articles(id) ON DELETE SET NULL,
       FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
@@ -449,6 +452,29 @@ export function initDatabase() {
   migrateColumn('articles', 'meta_desc_uk TEXT DEFAULT ""');
   migrateColumn('articles', 'meta_desc_en TEXT DEFAULT ""');
   migrateColumn('articles', 'tags_json TEXT DEFAULT "[]"');
+  migrateColumn('articles', 'article_type TEXT DEFAULT "news"');
+  migrateColumn('articles', 'review_score REAL');
+  migrateColumn('articles', 'views_count INTEGER DEFAULT 0');
+
+  // Backfill article attributes for existing rows
+  try {
+    db.exec(`
+      UPDATE articles
+      SET article_type = 'review'
+      WHERE (LOWER(title) LIKE '%огляд%' OR LOWER(title) LIKE '%review%')
+        AND (article_type IS NULL OR article_type = 'news');
+
+      UPDATE articles
+      SET article_type = 'news'
+      WHERE article_type IS NULL;
+
+      UPDATE articles
+      SET views_count = 0
+      WHERE views_count IS NULL;
+    `);
+  } catch (err) {
+    console.error('Error during article column backfill:', err);
+  }
 
   migrateColumn('article_translations', 'meta_title TEXT DEFAULT ""');
   migrateColumn('article_translations', 'meta_description TEXT DEFAULT ""');
@@ -792,9 +818,10 @@ function seedData() {
 
   // 11. Initial Articles (with multiple status values, version 1, translations UA and EN)
   const articlesCount = db.prepare('SELECT count(*) as count FROM articles').get() as { count: number };
-  if (articlesCount.count === 0) {
+  const hasArt4 = db.prepare('SELECT id FROM articles WHERE id = ?').get('art_samsung_s26_ultra');
+  if (articlesCount.count === 0 || !hasArt4) {
     const insertArticle = db.prepare(`
-      INSERT INTO articles (
+      INSERT OR IGNORE INTO articles (
         id, source_id, source_article_id, source_url, source_author, source_published_at,
         title, subtitle, excerpt, content, category_id, author_id,
         featured_image_id, featured_image_url, status, rights_status,
@@ -804,18 +831,18 @@ function seedData() {
     `);
 
     const insertVersion = db.prepare(`
-      INSERT INTO article_versions (id, article_id, version_number, title, excerpt, content, changed_by, change_reason, created_at)
+      INSERT OR IGNORE INTO article_versions (id, article_id, version_number, title, excerpt, content, changed_by, change_reason, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertTrans = db.prepare(`
-      INSERT INTO article_translations (id, article_id, language, title, subtitle, excerpt, content, slug, translation_status, auto_translated, reviewed_by, updated_at)
+      INSERT OR IGNORE INTO article_translations (id, article_id, language, title, subtitle, excerpt, content, slug, translation_status, auto_translated, reviewed_by, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     // Seed source articles first so articles foreign key constraint is satisfied
     const insertSrcArt = db.prepare(`
-      INSERT INTO source_articles (id, source_id, external_id, source_url, title, raw_html, raw_text, author, published_at, content_hash, status, created_at, updated_at)
+      INSERT OR IGNORE INTO source_articles (id, source_id, external_id, source_url, title, raw_html, raw_text, author, published_at, content_hash, status, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'processed', ?, ?)
     `);
 
@@ -1396,7 +1423,7 @@ Retail units featuring these processors begin shipping worldwide this week.`;
 
     // Add a change event for the review queue
     const insertChange = db.prepare(`
-      INSERT INTO change_events (id, source_article_id, article_id, event_type, diff_summary, previous_hash, new_hash, status, detected_at)
+      INSERT OR IGNORE INTO change_events (id, source_article_id, article_id, event_type, diff_summary, previous_hash, new_hash, status, detected_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_review', ?)
     `);
 
@@ -1413,7 +1440,7 @@ Retail units featuring these processors begin shipping worldwide this week.`;
 
     // Add sample notifications
     const insertNotif = db.prepare(`
-      INSERT INTO notifications (id, type, title, message, link, read, created_at)
+      INSERT OR IGNORE INTO notifications (id, type, title, message, link, read, created_at)
       VALUES (?, ?, ?, ?, ?, 0, ?)
     `);
     insertNotif.run(
@@ -1432,5 +1459,12 @@ Retail units featuring these processors begin shipping worldwide this week.`;
       '/admin/review-queue',
       now
     );
+
+    // Ensure all articles have non-zero views and appropriate types
+    try {
+      db.prepare("UPDATE articles SET article_type = 'news', views_count = 3450 WHERE id = 'art_m4_max_chips' AND (views_count IS NULL OR views_count = 0)").run();
+      db.prepare("UPDATE articles SET article_type = 'news', views_count = 6890 WHERE id = 'art_quantum_chip_google' AND (views_count IS NULL OR views_count = 0)").run();
+      db.prepare("UPDATE articles SET article_type = 'news', views_count = 5120 WHERE id = 'art_ev_solid_state' AND (views_count IS NULL OR views_count = 0)").run();
+    } catch {}
   }
 }

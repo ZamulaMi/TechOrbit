@@ -339,13 +339,15 @@ export class ArticleService {
         title, subtitle, excerpt, content, category_id, author_id,
         featured_image_id, featured_image_url, status, rights_status,
         slug_uk, slug_en, created_at, updated_at, published_at,
-        last_source_check, source_content_hash
+        last_source_check, source_content_hash,
+        article_type, review_score, views_count
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
-        ?, ?
+        ?, ?,
+        ?, ?, ?
       )
     `);
 
@@ -372,7 +374,10 @@ export class ArticleService {
       now,
       data.status === 'PUBLISHED' ? now : null,
       now,
-      data.source_content_hash || null
+      data.source_content_hash || null,
+      data.article_type || 'news',
+      data.review_score ?? null,
+      data.views_count || 0
     );
 
     // Create initial version 1
@@ -415,6 +420,9 @@ export class ArticleService {
         meta_desc_en = ?,
         tags_json = ?,
         translation_status = COALESCE(?, translation_status),
+        article_type = COALESCE(?, article_type),
+        review_score = COALESCE(?, review_score),
+        views_count = COALESCE(?, views_count),
         updated_at = ?,
         published_at = ?
       WHERE id = ?
@@ -439,6 +447,9 @@ export class ArticleService {
       updated.meta_desc_en || existing.meta_desc_en || '',
       updated.tags_json || existing.tags_json || '[]',
       data.translation_status || null,
+      data.article_type || null,
+      data.review_score !== undefined ? data.review_score : null,
+      data.views_count !== undefined ? data.views_count : null,
       now,
       updated.published_at,
       id
