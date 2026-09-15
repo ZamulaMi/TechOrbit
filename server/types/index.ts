@@ -180,6 +180,8 @@ export interface Article {
   source_content_hash: string | null;
   category_name_uk?: string;
   category_name_en?: string;
+  category_slug_uk?: string;
+  category_slug_en?: string;
   author_name?: string;
   source_name?: string;
   translation_status?: string;
@@ -189,6 +191,9 @@ export interface Article {
   meta_desc_uk?: string;
   meta_desc_en?: string;
   tags_json?: string;
+  canonical_url?: string;
+  robots?: string;
+  og_image_url?: string;
 }
 
 export interface ArticleVersion {
@@ -452,7 +457,15 @@ export interface AdSlot {
   id: string;
   slot_key: string;
   name: string;
-  position: 'header_banner' | 'sidebar_top' | 'article_inline' | 'footer_leaderboard' | 'in_feed';
+  position: 'top' | 'after_hero' | 'article_top' | 'article_middle' | 'article_bottom' | 'sidebar' | 'footer' | string;
+  provider: 'adsense' | 'custom' | 'partner';
+  publisher_id?: string;
+  ad_slot?: string;
+  desktop: boolean;
+  tablet: boolean;
+  mobile: boolean;
+  frequency: number;
+  format?: string;
   code_snippet: string;
   is_active: boolean;
   fallback_image_url: string;
@@ -463,7 +476,7 @@ export interface AdSlot {
 
 export interface SeoSetting {
   id: string;
-  page_type: 'home' | 'article' | 'category' | 'author' | 'tag' | 'search';
+  page_type: 'global' | 'home' | 'article' | 'category' | 'author' | 'tag' | 'search' | 'news' | 'review' | string;
   meta_title_uk: string;
   meta_title_en: string;
   meta_desc_uk: string;
@@ -471,6 +484,11 @@ export interface SeoSetting {
   og_image_url: string;
   canonical_base: string;
   schema_type: string;
+  robots?: string;
+  google_analytics_id?: string;
+  google_search_console_code?: string;
+  sitemap_enabled?: boolean;
+  extra_meta_tags?: string;
   updated_at: string;
 }
 

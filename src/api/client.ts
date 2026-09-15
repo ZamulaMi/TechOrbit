@@ -88,7 +88,27 @@ export const api = {
     getRelated: (articleId: string, limit: number = 4, lang: Language = 'uk') =>
       fetchJson<Article[]>(`/api/public/related/${articleId}?limit=${limit}&lang=${lang}`),
     getArticle: (slug: string, lang: Language = 'uk') =>
-      fetchJson<{ article: Article; translations: ArticleTranslation[]; jsonLd: any }>(`/api/public/articles/${slug}?lang=${lang}`),
+      fetchJson<{
+        article: Article;
+        translations: ArticleTranslation[];
+        meta?: {
+          title: string;
+          description: string;
+          canonical: string;
+          robots: string;
+          ogTitle: string;
+          ogDescription: string;
+          ogImage: string;
+          ogUrl: string;
+          twitterTitle: string;
+          twitterDescription: string;
+          twitterImage: string;
+          hreflangs: { lang: string; href: string }[];
+        };
+        jsonLd: any;
+        breadcrumbJsonLd?: any;
+        breadcrumbs?: { name: string; url: string }[];
+      }>(`/api/public/articles/${slug}?lang=${lang}`),
     getCategories: () => fetchJson<Category[]>('/api/public/categories'),
     getSettings: () =>
       fetchJson<{ settings: Record<string, string>; socialLinks: SocialLink[]; homepageSections: any[]; siteElements: any[] }>('/api/public/settings'),
@@ -101,7 +121,15 @@ export const api = {
         body: JSON.stringify({ email })
       }),
     getAds: () => fetchJson<AdSlot[]>('/api/public/ads'),
-    getSeo: (pageType: string) => fetchJson<SeoSetting | null>(`/api/public/seo/${pageType}`)
+    getSeo: (pageType: string) => fetchJson<SeoSetting | null>(`/api/public/seo/${pageType}`),
+    getSeoGlobal: () =>
+      fetchJson<{
+        seo: SeoSetting;
+        orgJsonLd: any;
+        websiteJsonLdUk: any;
+        websiteJsonLdEn: any;
+        baseUrl: string;
+      }>('/api/public/seo/global')
   },
 
   // Admin

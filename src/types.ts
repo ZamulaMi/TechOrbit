@@ -192,6 +192,8 @@ export interface Article {
   category_id?: string;
   category_name_uk?: string;
   category_name_en?: string;
+  category_slug_uk?: string;
+  category_slug_en?: string;
   author_id?: string;
   author_name?: string;
   featured_image_id?: string;
@@ -215,6 +217,9 @@ export interface Article {
   meta_desc_en?: string;
   tags_json?: string;
   tags?: string[];
+  canonical_url?: string;
+  robots?: string;
+  og_image_url?: string;
 }
 
 export interface ArticleTranslation {
@@ -360,11 +365,20 @@ export interface AdSlot {
   id: string;
   slot_key: string;
   name: string;
-  position: 'header_leaderboard' | 'sidebar' | 'in_article' | 'footer_banner';
+  position: 'top' | 'after_hero' | 'article_top' | 'article_middle' | 'article_bottom' | 'sidebar' | 'footer' | string;
+  provider: 'adsense' | 'custom' | 'partner';
+  publisher_id?: string;
+  ad_slot?: string;
+  desktop: boolean;
+  tablet: boolean;
+  mobile: boolean;
+  frequency: number;
+  format?: string;
   code_snippet?: string;
   fallback_image_url?: string;
   fallback_link?: string;
   is_active: boolean;
+  updated_at?: string;
 }
 
 export interface SocialLink {
@@ -427,13 +441,21 @@ export interface HomepageSection {
 
 export interface SeoSetting {
   id: string;
-  page_type: 'homepage' | 'article' | 'category' | 'author';
+  page_type: 'global' | 'home' | 'article' | 'category' | 'author' | 'tag' | 'search' | 'news' | 'review' | string;
   meta_title_uk: string;
   meta_title_en: string;
   meta_desc_uk: string;
   meta_desc_en: string;
   og_image_url?: string;
+  canonical_base?: string;
   canonical_domain?: string;
+  schema_type?: string;
+  robots?: string;
+  google_analytics_id?: string;
+  google_search_console_code?: string;
+  sitemap_enabled?: boolean;
+  extra_meta_tags?: string;
+  updated_at?: string;
 }
 
 export interface NotificationItem {

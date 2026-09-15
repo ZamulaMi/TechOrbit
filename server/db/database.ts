@@ -455,6 +455,9 @@ export function initDatabase() {
   migrateColumn('articles', 'article_type TEXT DEFAULT "news"');
   migrateColumn('articles', 'review_score REAL');
   migrateColumn('articles', 'views_count INTEGER DEFAULT 0');
+  migrateColumn('articles', 'canonical_url TEXT DEFAULT ""');
+  migrateColumn('articles', 'robots TEXT DEFAULT "index, follow"');
+  migrateColumn('articles', 'og_image_url TEXT DEFAULT ""');
 
   // Backfill article attributes for existing rows
   try {
@@ -499,6 +502,22 @@ export function initDatabase() {
   migrateColumn('homepage_sections', 'sort_by TEXT DEFAULT "latest"');
   migrateColumn('homepage_sections', 'desktop_visible INTEGER DEFAULT 1');
   migrateColumn('homepage_sections', 'mobile_visible INTEGER DEFAULT 1');
+
+  // Dynamic migrations for SEO & Ads
+  migrateColumn('seo_settings', 'robots TEXT DEFAULT "index, follow"');
+  migrateColumn('seo_settings', 'google_analytics_id TEXT DEFAULT ""');
+  migrateColumn('seo_settings', 'google_search_console_code TEXT DEFAULT ""');
+  migrateColumn('seo_settings', 'sitemap_enabled INTEGER DEFAULT 1');
+  migrateColumn('seo_settings', 'extra_meta_tags TEXT DEFAULT ""');
+
+  migrateColumn('ad_slots', 'provider TEXT DEFAULT "adsense"');
+  migrateColumn('ad_slots', 'publisher_id TEXT DEFAULT ""');
+  migrateColumn('ad_slots', 'ad_slot TEXT DEFAULT ""');
+  migrateColumn('ad_slots', 'desktop INTEGER DEFAULT 1');
+  migrateColumn('ad_slots', 'tablet INTEGER DEFAULT 1');
+  migrateColumn('ad_slots', 'mobile INTEGER DEFAULT 1');
+  migrateColumn('ad_slots', 'frequency INTEGER DEFAULT 1');
+  migrateColumn('ad_slots', 'format TEXT DEFAULT "auto"');
 
   seedData();
 }
@@ -767,51 +786,238 @@ function seedData() {
   }
 
   // 9. Ad Slots
-  const adCount = db.prepare('SELECT count(*) as count FROM ad_slots').get() as { count: number };
-  if (adCount.count === 0) {
-    const insertAd = db.prepare(`
-      INSERT INTO ad_slots (id, slot_key, name, position, code_snippet, is_active, fallback_image_url, fallback_link, max_impressions, updated_at)
-      VALUES (?, ?, ?, ?, ?, 1, ?, ?, 0, ?)
-    `);
+  const defaultSlots = [
+    {
+      id: 'ad_top',
+      key: 'ad_top',
+      name: 'Верхній банер під шапкою (Top)',
+      pos: 'top',
+      provider: 'adsense',
+      ad_slot: '1000000001',
+      desktop: 1,
+      tablet: 1,
+      mobile: 1,
+      freq: 1,
+      active: 1,
+      snippet: '<!-- AdSense Top Responsive Banner -->',
+      img: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=728&h=90&fit=crop&q=80',
+      link: 'https://techorbit.media'
+    },
+    {
+      id: 'ad_after_hero',
+      key: 'ad_after_hero',
+      name: 'Банер після Hero (After Hero)',
+      pos: 'after_hero',
+      provider: 'adsense',
+      ad_slot: '1000000002',
+      desktop: 1,
+      tablet: 1,
+      mobile: 1,
+      freq: 1,
+      active: 1,
+      snippet: '<!-- AdSense After Hero Banner -->',
+      img: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=728&h=90&fit=crop&q=80',
+      link: 'https://techorbit.media'
+    },
+    {
+      id: 'ad_article_top',
+      key: 'ad_article_top',
+      name: 'Початок статті (Article Top)',
+      pos: 'article_top',
+      provider: 'adsense',
+      ad_slot: '1000000003',
+      desktop: 1,
+      tablet: 1,
+      mobile: 1,
+      freq: 1,
+      active: 1,
+      snippet: '<!-- AdSense Article Top -->',
+      img: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=728&h=90&fit=crop&q=80',
+      link: 'https://techorbit.media'
+    },
+    {
+      id: 'ad_article_middle',
+      key: 'ad_article_middle',
+      name: 'Середина статті (Article Middle)',
+      pos: 'article_middle',
+      provider: 'adsense',
+      ad_slot: '1000000004',
+      desktop: 1,
+      tablet: 1,
+      mobile: 1,
+      freq: 1,
+      active: 1,
+      snippet: '<!-- AdSense Article Middle In-Feed -->',
+      img: 'https://images.unsplash.com/photo-1531297484001-80022131f5a1?w=728&h=90&fit=crop&q=80',
+      link: 'https://techorbit.media'
+    },
+    {
+      id: 'ad_article_bottom',
+      key: 'ad_article_bottom',
+      name: 'Кінець статті (Article Bottom)',
+      pos: 'article_bottom',
+      provider: 'adsense',
+      ad_slot: '1000000005',
+      desktop: 1,
+      tablet: 1,
+      mobile: 1,
+      freq: 1,
+      active: 1,
+      snippet: '<!-- AdSense Article Bottom -->',
+      img: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=728&h=90&fit=crop&q=80',
+      link: 'https://techorbit.media'
+    },
+    {
+      id: 'ad_sidebar',
+      key: 'ad_sidebar',
+      name: 'Бокова колонка (Sidebar Unit)',
+      pos: 'sidebar',
+      provider: 'adsense',
+      ad_slot: '1000000006',
+      desktop: 1,
+      tablet: 1,
+      mobile: 0,
+      freq: 1,
+      active: 1,
+      snippet: '<!-- AdSense Sticky Sidebar 300x250/300x600 -->',
+      img: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=300&h=250&fit=crop&q=80',
+      link: 'https://techorbit.media'
+    },
+    {
+      id: 'ad_footer',
+      key: 'ad_footer',
+      name: 'Перед футером (Footer Banner)',
+      pos: 'footer',
+      provider: 'adsense',
+      ad_slot: '1000000007',
+      desktop: 1,
+      tablet: 1,
+      mobile: 1,
+      freq: 1,
+      active: 1,
+      snippet: '<!-- AdSense Footer Leaderboard -->',
+      img: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=728&h=90&fit=crop&q=80',
+      link: 'https://techorbit.media'
+    }
+  ];
+
+  const insertAd = db.prepare(`
+    INSERT OR IGNORE INTO ad_slots (
+      id, slot_key, name, position, provider, publisher_id, ad_slot,
+      desktop, tablet, mobile, frequency, format, code_snippet, is_active,
+      fallback_image_url, fallback_link, max_impressions, updated_at
+    ) VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, 'auto', ?, ?, ?, ?, 0, ?)
+  `);
+
+  for (const slot of defaultSlots) {
     insertAd.run(
-      'ad_header_top',
-      'header_leaderboard',
-      'Головний банер шапки (728x90)',
-      'header_banner',
-      '<!-- TechOrbit Sponsor Unit A -->',
-      'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=728&h=90&fit=crop&q=80',
-      'https://techorbit.media/partners',
-      now
-    );
-    insertAd.run(
-      'ad_sidebar_top',
-      'sidebar_rectangle',
-      'Боковий модуль (300x250)',
-      'sidebar_top',
-      '<!-- TechOrbit Sponsor Unit B -->',
-      'https://images.unsplash.com/photo-1518770660439-4636190af475?w=300&h=250&fit=crop&q=80',
-      'https://techorbit.media/partners',
+      slot.id,
+      slot.key,
+      slot.name,
+      slot.pos,
+      slot.provider,
+      slot.ad_slot,
+      slot.desktop,
+      slot.tablet,
+      slot.mobile,
+      slot.freq,
+      slot.snippet,
+      slot.active,
+      slot.img,
+      slot.link,
       now
     );
   }
 
-  // 10. SEO Settings
-  const seocount = db.prepare('SELECT count(*) as count FROM seo_settings').get() as { count: number };
-  if (seocount.count === 0) {
-    const insertSeo = db.prepare(`
-      INSERT INTO seo_settings (id, page_type, meta_title_uk, meta_title_en, meta_desc_uk, meta_desc_en, og_image_url, canonical_base, schema_type, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+  // 10. SEO Settings (Global and per-page-type)
+  const defaultSeo = [
+    {
+      id: 'seo_global',
+      type: 'global',
+      titleUk: 'TechOrbit — Незалежне українське медіа про технології та інновації',
+      titleEn: 'TechOrbit — Independent Tech Media, AI & Hardware Intelligence',
+      descUk: 'Щоденні оперативні новини IT-індустрії, детальні огляди смартфонів і заліза, аналітика штучного інтелекту та космосу.',
+      descEn: 'Daily tech journalism, in-depth gadget reviews, AI breakthroughs, software analysis and global engineering culture.',
+      og: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=1200&h=630&fit=crop&q=80',
+      schema: 'NewsMediaOrganization',
+      robots: 'index, follow'
+    },
+    {
+      id: 'seo_home',
+      type: 'home',
+      titleUk: 'TechOrbit — Головна | Новини технологій, гаджети та ШІ',
+      titleEn: 'TechOrbit — Home | Technology News, Hardware Reviews & AI',
+      descUk: 'Головна сторінка TechOrbit: найважливіші події зі світу технологій, авторські огляди та аналітика.',
+      descEn: 'TechOrbit front page: breaking technology news, expert hardware tests and deep industry analysis.',
+      og: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=1200&h=630&fit=crop&q=80',
+      schema: 'WebSite',
+      robots: 'index, follow'
+    },
+    {
+      id: 'seo_article',
+      type: 'article',
+      titleUk: 'Стаття — TechOrbit',
+      titleEn: 'Article — TechOrbit',
+      descUk: 'Ексклюзивний матеріал та експертний погляд від редакторів TechOrbit.',
+      descEn: 'In-depth tech reporting and analysis from TechOrbit editors.',
+      og: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=1200&h=630&fit=crop&q=80',
+      schema: 'NewsArticle',
+      robots: 'index, follow'
+    },
+    {
+      id: 'seo_category',
+      type: 'category',
+      titleUk: 'Рубрика — TechOrbit',
+      titleEn: 'Category — TechOrbit',
+      descUk: 'Усі матеріали вибраної рубрики технологічного видання TechOrbit.',
+      descEn: 'All stories and updates in this TechOrbit category.',
+      og: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=1200&h=630&fit=crop&q=80',
+      schema: 'CollectionPage',
+      robots: 'index, follow'
+    },
+    {
+      id: 'seo_news',
+      type: 'news',
+      titleUk: 'Стрічка новин — TechOrbit',
+      titleEn: 'News Feed — TechOrbit',
+      descUk: 'Оперативна стрічка останніх технологічних новин в Україні та світі.',
+      descEn: 'Live breaking technology news stream from around the world.',
+      og: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=1200&h=630&fit=crop&q=80',
+      schema: 'CollectionPage',
+      robots: 'index, follow'
+    },
+    {
+      id: 'seo_reviews',
+      type: 'review',
+      titleUk: 'Огляди техніки та гаджетів — TechOrbit',
+      titleEn: 'Hardware & Gadget Reviews — TechOrbit',
+      descUk: 'Чесні та незалежні огляди смартфонів, ноутбуків, аудіо та розумних пристроїв.',
+      descEn: 'Honest and comprehensive reviews of smartphones, laptops, audio and smart home devices.',
+      og: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=1200&h=630&fit=crop&q=80',
+      schema: 'CollectionPage',
+      robots: 'index, follow'
+    }
+  ];
+
+  const insertSeo = db.prepare(`
+    INSERT OR IGNORE INTO seo_settings (
+      id, page_type, meta_title_uk, meta_title_en, meta_desc_uk, meta_desc_en,
+      og_image_url, canonical_base, schema_type, robots, google_analytics_id,
+      google_search_console_code, sitemap_enabled, extra_meta_tags, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'https://techorbit.media', ?, ?, '', '', 1, '', ?)
+  `);
+
+  for (const s of defaultSeo) {
     insertSeo.run(
-      'seo_home',
-      'home',
-      'TechOrbit — Технологічне медіа, новини заліза, гаджети та ШІ',
-      'TechOrbit — Next-Gen Tech Media, Hardware, Gadgets & AI Insights',
-      'TechOrbit: щоденні технологічні новини, незалежні огляди техніки, переклади та аналітика індустрії.',
-      'TechOrbit: daily tech news, independent hardware reviews, translations and industry intelligence.',
-      'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=1200&h=630&fit=crop&q=80',
-      'https://techorbit.media',
-      'NewsMediaOrganization',
+      s.id,
+      s.type,
+      s.titleUk,
+      s.titleEn,
+      s.descUk,
+      s.descEn,
+      s.og,
+      s.schema,
+      s.robots,
       now
     );
   }

@@ -52,6 +52,9 @@ export function ArticleEditorPage() {
   const [metaDescUk, setMetaDescUk] = useState('');
   const [metaTitleEn, setMetaTitleEn] = useState('');
   const [metaDescEn, setMetaDescEn] = useState('');
+  const [canonicalUrl, setCanonicalUrl] = useState('');
+  const [robots, setRobots] = useState('index, follow');
+  const [ogImageUrl, setOgImageUrl] = useState('');
 
   // Structured blocks
   const [blocks, setBlocks] = useState<EditorBlock[]>([]);
@@ -111,6 +114,9 @@ export function ArticleEditorPage() {
         setMetaDescUk(art.meta_desc_uk || '');
         setMetaTitleEn(art.meta_title_en || '');
         setMetaDescEn(art.meta_desc_en || '');
+        setCanonicalUrl(art.canonical_url || '');
+        setRobots(art.robots || 'index, follow');
+        setOgImageUrl(art.og_image_url || '');
         setVersions(vers);
 
         // Parse structured blocks
@@ -220,7 +226,10 @@ export function ArticleEditorPage() {
           featured_image_url: featuredImageUrl || undefined,
           rights_status: rightsStatus,
           source_url: sourceUrl || undefined,
-          source_author: sourceAuthor || undefined
+          source_author: sourceAuthor || undefined,
+          canonical_url: canonicalUrl || undefined,
+          robots: robots || 'index, follow',
+          og_image_url: ogImageUrl || undefined
         });
 
         // Save translation if English fields were provided
@@ -261,6 +270,9 @@ export function ArticleEditorPage() {
           meta_title_en: metaTitleEn || enTitle,
           meta_desc_uk: metaDescUk || excerpt,
           meta_desc_en: metaDescEn || enExcerpt,
+          canonical_url: canonicalUrl || undefined,
+          robots: robots || 'index, follow',
+          og_image_url: ogImageUrl || undefined,
           changeReason: changeReason || 'Редакційні правки'
         });
 
@@ -874,6 +886,77 @@ export function ArticleEditorPage() {
                   />
                 </div>
               )}
+            </div>
+
+            {/* SEO, Canonical & Indexing Box */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                <Search className="w-3.5 h-3.5 text-emerald-400" />
+                <span>SEO, Canonical & Індексація</span>
+              </h4>
+
+              {/* Canonical Warning & Input */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Канонічний URL (Canonical)
+                </label>
+                <input
+                  type="text"
+                  value={canonicalUrl}
+                  onChange={e => setCanonicalUrl(e.target.value)}
+                  placeholder="Автоматично: Self-referencing URL"
+                  className={`w-full bg-slate-950 border rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none ${
+                    canonicalUrl.includes('wylsa.com')
+                      ? 'border-rose-500 text-rose-300'
+                      : 'border-slate-800 focus:border-emerald-500'
+                  }`}
+                />
+                {canonicalUrl.includes('wylsa.com') ? (
+                  <p className="text-[10px] text-rose-400 font-medium">
+                    Увага! За правилами TechOrbit, канонічне посилання ніколи не повинно вести на домен-донор (wylsa.com). TechOrbit функціонує як незалежний сайт з власними URL.
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-slate-500">
+                    За замовчуванням кожна опублікована стаття має self-referencing canonical на свій TechOrbit URL.
+                  </p>
+                )}
+              </div>
+
+              {/* Robots Directive */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Robots індексація
+                </label>
+                <select
+                  value={robots}
+                  onChange={e => setRobots(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                >
+                  <option value="index, follow">index, follow (Відкрито для пошуку)</option>
+                  <option value="noindex, follow">noindex, follow (Приховати з видачі)</option>
+                  <option value="noindex, nofollow">noindex, nofollow (Повна заборона)</option>
+                </select>
+                <p className="text-[10px] text-slate-500">
+                  Чернетки (Draft) та черга перевірки автоматично отримують noindex.
+                </p>
+              </div>
+
+              {/* Custom OG Image Override */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Спеціальне OpenGraph зображення (опціонально)
+                </label>
+                <input
+                  type="url"
+                  value={ogImageUrl}
+                  onChange={e => setOgImageUrl(e.target.value)}
+                  placeholder="URL для соціальних мереж"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                />
+                <p className="text-[10px] text-slate-500">
+                  Якщо не вказано, використовується головне зображення статті.
+                </p>
+              </div>
             </div>
 
             {/* Attribution & Rights */}

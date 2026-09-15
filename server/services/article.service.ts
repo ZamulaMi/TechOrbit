@@ -86,6 +86,8 @@ export class ArticleService {
         COALESCE(te.slug, a.slug_en) as slug_en,
         c.name_uk as category_name_uk,
         c.name_en as category_name_en,
+        c.slug_uk as category_slug_uk,
+        c.slug_en as category_slug_en,
         au.name as author_name,
         s.name as source_name
       FROM articles a
@@ -213,6 +215,8 @@ export class ArticleService {
         a.*,
         c.name_uk as category_name_uk,
         c.name_en as category_name_en,
+        c.slug_uk as category_slug_uk,
+        c.slug_en as category_slug_en,
         au.name as author_name,
         s.name as source_name
       FROM articles a
@@ -340,13 +344,15 @@ export class ArticleService {
         featured_image_id, featured_image_url, status, rights_status,
         slug_uk, slug_en, created_at, updated_at, published_at,
         last_source_check, source_content_hash,
-        article_type, review_score, views_count
+        article_type, review_score, views_count,
+        canonical_url, robots, og_image_url
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?,
+        ?, ?, ?,
         ?, ?, ?
       )
     `);
@@ -377,7 +383,10 @@ export class ArticleService {
       data.source_content_hash || null,
       data.article_type || 'news',
       data.review_score ?? null,
-      data.views_count || 0
+      data.views_count || 0,
+      data.canonical_url || '',
+      data.robots || 'index, follow',
+      data.og_image_url || ''
     );
 
     // Create initial version 1
@@ -423,6 +432,9 @@ export class ArticleService {
         article_type = COALESCE(?, article_type),
         review_score = COALESCE(?, review_score),
         views_count = COALESCE(?, views_count),
+        canonical_url = ?,
+        robots = ?,
+        og_image_url = ?,
         updated_at = ?,
         published_at = ?
       WHERE id = ?
@@ -450,6 +462,9 @@ export class ArticleService {
       data.article_type || null,
       data.review_score !== undefined ? data.review_score : null,
       data.views_count !== undefined ? data.views_count : null,
+      data.canonical_url !== undefined ? data.canonical_url : (existing.canonical_url || ''),
+      data.robots !== undefined ? data.robots : (existing.robots || 'index, follow'),
+      data.og_image_url !== undefined ? data.og_image_url : (existing.og_image_url || ''),
       now,
       updated.published_at,
       id

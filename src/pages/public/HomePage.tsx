@@ -11,6 +11,8 @@ import { HorizontalSection } from '../../components/homepage/HorizontalSection.t
 import { CompactSection } from '../../components/homepage/CompactSection.tsx';
 import { NewsletterSection } from '../../components/homepage/NewsletterSection.tsx';
 import { AdBannerSection } from '../../components/homepage/AdBannerSection.tsx';
+import { SeoHead } from '../../components/seo/SeoHead.tsx';
+import { AdSlotUnit } from '../../components/ads/AdSlotUnit.tsx';
 
 interface HomePageProps {
   currentLang: Language;
@@ -31,6 +33,7 @@ export function HomePage({ currentLang, categories }: HomePageProps) {
 
   const [sectionsData, setSectionsData] = useState<SectionWithArticles[]>([]);
   const [ads, setAds] = useState<AdSlot[]>([]);
+  const [seoData, setSeoData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,13 +43,15 @@ export function HomePage({ currentLang, categories }: HomePageProps) {
   const loadHomepage = async () => {
     setLoading(true);
     try {
-      // 1. Fetch configured homepage sections and active ads
-      const [configuredSections, activeAds] = await Promise.all([
+      // 1. Fetch configured homepage sections, active ads, and SEO data
+      const [configuredSections, activeAds, seoRes] = await Promise.all([
         api.public.getHomepageSections(),
-        api.public.getAds()
+        api.public.getAds(),
+        api.public.getSeoGlobal().catch(() => null)
       ]);
 
       setAds(activeAds);
+      setSeoData(seoRes);
 
       // 2. For each active section, fetch its configured articles from DB
       const activeSections = configuredSections.filter(s => s.is_active);
@@ -81,16 +86,48 @@ export function HomePage({ currentLang, categories }: HomePageProps) {
     }
   };
 
-  const topAd = ads.find(a => a.position === 'header_leaderboard' && a.is_active);
+  const baseUrl = seoData?.baseUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://techorbit.media');
+  const homeTitle = activeLang === 'uk'
+    ? 'TechOrbit — Головні новини технологій, гаджетів та штучного інтелекту'
+    : 'TechOrbit — Global Tech News, Gadgets & Artificial Intelligence';
+  const homeDesc = activeLang === 'uk'
+    ? 'Незалежне технологічне медіа України. Актуальні огляди смартфонів, гаджетів, індустрія штучного інтелекту та аналітика.'
+    : 'Independent technology publication covering smartphone reviews, breakthrough gadgets, and AI innovation.';
+
+  const homeHreflangs = [
+    { lang: 'uk', href: `${baseUrl}/uk` },
+    { lang: 'en', href: `${baseUrl}/en` },
+    { lang: 'x-default', href: `${baseUrl}/uk` }
+  ];
+
+  const homeJsonLd = [
+    seoData?.orgJsonLd,
+    activeLang === 'uk' ? seoData?.websiteJsonLdUk : seoData?.websiteJsonLdEn
+  ].filter(Boolean);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      {/* Optional Top Leaderboard Ad */}
-      {topAd && (
-        <div className="max-w-7xl mx-auto px-4 pt-4">
-          <AdBannerSection adSlot={topAd} />
-        </div>
-      )}
+      {/* Dynamic SEO Meta & JSON-LD Structured Data */}
+      <SeoHead
+        title={homeTitle}
+        description={homeDesc}
+        canonical={`${baseUrl}/${activeLang}`}
+        robots="index, follow"
+        ogTitle={homeTitle}
+        ogDescription={homeDesc}
+        ogUrl={`${baseUrl}/${activeLang}`}
+        ogType="website"
+        twitterTitle={homeTitle}
+        twitterDescription={homeDesc}
+        hreflangs={homeHreflangs}
+        jsonLd={homeJsonLd}
+        lang={activeLang}
+      />
+
+      {/* Top Banner Ad Placement */}
+      <div className="max-w-7xl mx-auto px-4 pt-4">
+        <AdSlotUnit position="top" lang={activeLang} />
+      </div>
 
       {/* Main Container */}
       <div className="max-w-7xl mx-auto px-4 py-8 space-y-12">
@@ -190,6 +227,7 @@ export function HomePage({ currentLang, categories }: HomePageProps) {
                 return (
                   <div key={section.id} className={deviceClass}>
                     <HeroSection title={title} articles={articles} currentLang={activeLang} />
+                    <AdSlotUnit position="after_hero" lang={activeLang} />
                   </div>
                 );
               case 'two-column':

@@ -14,7 +14,9 @@ import {
   LogOut,
   Languages,
   LayoutTemplate,
-  Sliders
+  Sliders,
+  Search,
+  DollarSign
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.tsx';
 
@@ -50,6 +52,8 @@ export function AdminSidebar({ reviewCount = 0, changesCount = 0 }: AdminSidebar
     },
     { name: 'Медіатека', path: '/admin/media', icon: ImageIcon },
     { name: 'Рубрики & Теги', path: '/admin/categories', icon: FolderTree },
+    { name: 'SEO & Мета-дані', path: '/admin/seo', icon: Search },
+    { name: 'Реклама & AdSense', path: '/admin/ads', icon: DollarSign },
     { name: 'Налаштування сайту', path: '/admin/settings', icon: Settings },
     { name: 'Журнал аудиту & Синхронізації', path: '/admin/audit', icon: ShieldAlert }
   ];

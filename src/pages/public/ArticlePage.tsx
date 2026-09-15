@@ -17,6 +17,8 @@ import {
 import { api } from '../../api/client.ts';
 import { Article, ArticleTranslation, Language } from '../../types.ts';
 import { SourceAttribution } from '../../components/article/SourceAttribution.tsx';
+import { SeoHead } from '../../components/seo/SeoHead.tsx';
+import { AdSlotUnit } from '../../components/ads/AdSlotUnit.tsx';
 
 interface ArticlePageProps {
   currentLang: Language;
@@ -31,7 +33,9 @@ export function ArticlePage({ currentLang, onLanguageChange }: ArticlePageProps)
   const [article, setArticle] = useState<Article | null>(null);
   const [translations, setTranslations] = useState<ArticleTranslation[]>([]);
   const [relatedArticles, setRelatedArticles] = useState<Article[]>([]);
+  const [meta, setMeta] = useState<any>(null);
   const [jsonLd, setJsonLd] = useState<any>(null);
+  const [breadcrumbJsonLd, setBreadcrumbJsonLd] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
@@ -43,7 +47,9 @@ export function ArticlePage({ currentLang, onLanguageChange }: ArticlePageProps)
       .then(res => {
         setArticle(res.article);
         setTranslations(res.translations);
+        setMeta(res.meta);
         setJsonLd(res.jsonLd);
+        setBreadcrumbJsonLd(res.breadcrumbJsonLd);
 
         // Fetch related articles
         if (res.article?.id) {
@@ -118,13 +124,23 @@ export function ArticlePage({ currentLang, onLanguageChange }: ArticlePageProps)
 
   return (
     <article className="min-h-screen bg-slate-950 text-slate-100 py-8 md:py-12">
-      {/* Inject SEO JSON-LD schema */}
-      {jsonLd && (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
-      )}
+      {/* Dynamic SEO Meta & JSON-LD Structured Data */}
+      <SeoHead
+        title={meta?.title || article.title}
+        description={meta?.description || article.excerpt}
+        canonical={meta?.canonical}
+        robots={meta?.robots}
+        ogTitle={meta?.ogTitle}
+        ogDescription={meta?.ogDescription}
+        ogImage={meta?.ogImage}
+        ogUrl={meta?.ogUrl}
+        twitterTitle={meta?.twitterTitle}
+        twitterDescription={meta?.twitterDescription}
+        twitterImage={meta?.twitterImage}
+        hreflangs={meta?.hreflangs}
+        jsonLd={[jsonLd, breadcrumbJsonLd].filter(Boolean)}
+        lang={activeLang}
+      />
 
       <div className="max-w-4xl mx-auto px-4 space-y-8">
         {/* Navigation & Breadcrumb */}
@@ -243,6 +259,9 @@ export function ArticlePage({ currentLang, onLanguageChange }: ArticlePageProps)
           </div>
         </header>
 
+        {/* Ad Slot: article_top */}
+        <AdSlotUnit position="article_top" lang={activeLang} />
+
         {/* Featured Image */}
         {article.featured_image_url && (
           <div className="rounded-3xl overflow-hidden aspect-[16/9] bg-slate-950 border border-slate-800 shadow-2xl">
@@ -265,23 +284,34 @@ export function ArticlePage({ currentLang, onLanguageChange }: ArticlePageProps)
         {/* Body Paragraphs */}
         <div className="space-y-6 text-base md:text-lg leading-relaxed text-slate-300">
           {paragraphs.map((p, idx) => {
+            const isMiddle = idx === Math.floor(paragraphs.length / 2) && paragraphs.length > 2;
+
             if (p.startsWith('- ') || p.startsWith('• ')) {
               const items = p.split('\n');
               return (
-                <ul key={idx} className="list-disc pl-6 space-y-2 text-slate-300">
-                  {items.map((it, i) => (
-                    <li key={i}>{it.replace(/^[-•]\s*/, '')}</li>
-                  ))}
-                </ul>
+                <div key={idx} className="space-y-6">
+                  <ul className="list-disc pl-6 space-y-2 text-slate-300">
+                    {items.map((it, i) => (
+                      <li key={i}>{it.replace(/^[-•]\s*/, '')}</li>
+                    ))}
+                  </ul>
+                  {isMiddle && <AdSlotUnit position="article_middle" lang={activeLang} />}
+                </div>
               );
             }
             return (
-              <p key={idx} className="whitespace-pre-line leading-relaxed">
-                {p}
-              </p>
+              <div key={idx} className="space-y-6">
+                <p className="whitespace-pre-line leading-relaxed">
+                  {p}
+                </p>
+                {isMiddle && <AdSlotUnit position="article_middle" lang={activeLang} />}
+              </div>
             );
           })}
         </div>
+
+        {/* Ad Slot: article_bottom */}
+        <AdSlotUnit position="article_bottom" lang={activeLang} />
 
         {/* Source Attribution Component */}
         <SourceAttribution article={article} language={activeLang} />

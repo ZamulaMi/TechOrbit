@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Category, Language, SocialLink, SiteElement } from '../../types.ts';
 import { api } from '../../api/client.ts';
+import { AdSlotUnit } from '../ads/AdSlotUnit.tsx';
 
 interface PublicFooterProps {
   categories: Category[];
@@ -182,6 +183,15 @@ export function PublicFooter({ categories, currentLang }: PublicFooterProps) {
                 {isUk ? 'Правила цитування та Fair Use' : 'Terms & Fair Use'}
               </Link>
             </li>
+            <li className="flex items-center gap-2 pt-1 font-mono text-[11px] text-slate-400">
+              <a href="/sitemap.xml" target="_blank" rel="noopener noreferrer" className="hover:text-emerald-400 transition-colors">
+                Sitemap (XML)
+              </a>
+              <span>•</span>
+              <a href="/robots.txt" target="_blank" rel="noopener noreferrer" className="hover:text-emerald-400 transition-colors">
+                Robots.txt
+              </a>
+            </li>
             <li className="pt-2">
               <Link
                 to="/admin"
@@ -193,6 +203,11 @@ export function PublicFooter({ categories, currentLang }: PublicFooterProps) {
             </li>
           </ul>
         </div>
+      </div>
+
+      {/* Footer Ad Placement */}
+      <div className="max-w-7xl mx-auto px-4 pb-4">
+        <AdSlotUnit position="footer" lang={currentLang} />
       </div>
 
       {/* Bottom Bar */}

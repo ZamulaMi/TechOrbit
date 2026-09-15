@@ -6,6 +6,7 @@ import { initDatabase } from './server/db/database.ts';
 import { authRouter } from './server/routes/auth.routes.ts';
 import { adminRouter } from './server/routes/admin.routes.ts';
 import { publicRouter } from './server/routes/public.routes.ts';
+import { SeoService } from './server/services/seo.service.ts';
 
 async function startServer() {
   // Initialize SQLite database and schema migrations
@@ -41,6 +42,47 @@ async function startServer() {
   app.use('/api/admin', authRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/public', publicRouter);
+
+  // Dynamic SEO Sitemaps & Robots.txt
+  app.get('/robots.txt', (req, res) => {
+    const baseUrl = SeoService.getBaseUrl(req.get('origin') || `${req.protocol}://${req.get('host')}`);
+    const robots = SeoService.generateRobotsTxt(baseUrl);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(robots);
+  });
+
+  app.get('/sitemap.xml', (req, res) => {
+    const baseUrl = SeoService.getBaseUrl(req.get('origin') || `${req.protocol}://${req.get('host')}`);
+    const xml = SeoService.generateSitemapIndex(baseUrl);
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(xml);
+  });
+
+  app.get('/sitemap-articles.xml', (req, res) => {
+    const baseUrl = SeoService.getBaseUrl(req.get('origin') || `${req.protocol}://${req.get('host')}`);
+    const xml = SeoService.generateArticlesSitemap(baseUrl);
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(xml);
+  });
+
+  app.get('/sitemap-categories.xml', (req, res) => {
+    const baseUrl = SeoService.getBaseUrl(req.get('origin') || `${req.protocol}://${req.get('host')}`);
+    const xml = SeoService.generateCategoriesSitemap(baseUrl);
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(xml);
+  });
+
+  app.get('/sitemap-images.xml', (req, res) => {
+    const baseUrl = SeoService.getBaseUrl(req.get('origin') || `${req.protocol}://${req.get('host')}`);
+    const xml = SeoService.generateImagesSitemap(baseUrl);
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(xml);
+  });
 
   // Vite Middleware / Static SPA serving
   if (process.env.NODE_ENV !== 'production') {

@@ -31,6 +31,8 @@ import { AuditLogsPage } from './pages/admin/AuditLogsPage.tsx';
 import { TranslationsPage } from './pages/admin/TranslationsPage.tsx';
 import { HomepageBuilderPage } from './pages/admin/HomepageBuilderPage.tsx';
 import { SiteElementsPage } from './pages/admin/SiteElementsPage.tsx';
+import { SeoSettingsPage } from './pages/admin/SeoSettingsPage.tsx';
+import { AdvertisementsPage } from './pages/admin/AdvertisementsPage.tsx';
 
 import { api } from './api/client.ts';
 import { Category, Language } from './types.ts';
@@ -88,6 +90,8 @@ export function App() {
             <Route path="/admin/changes" element={<ChangesPage />} />
             <Route path="/admin/media" element={<MediaPage />} />
             <Route path="/admin/categories" element={<CategoriesPage />} />
+            <Route path="/admin/seo" element={<SeoSettingsPage />} />
+            <Route path="/admin/ads" element={<AdvertisementsPage />} />
             <Route path="/admin/settings" element={<SettingsPage />} />
             <Route path="/admin/audit" element={<AuditLogsPage />} />
 

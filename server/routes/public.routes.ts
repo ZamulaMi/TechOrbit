@@ -115,16 +115,65 @@ publicRouter.get('/articles/:slug', (req: Request, res: Response) => {
     db.prepare('UPDATE articles SET views_count = views_count + 1 WHERE id = ?').run(article.id);
   } catch {}
 
-  // Get translations for language switcher
-  const translations = db.prepare('SELECT language, title, slug, excerpt, content FROM article_translations WHERE article_id = ?').all(article.id);
+  // Get translations for language switcher & alternate links
+  const translations = db.prepare('SELECT language, title, slug, excerpt, content, translation_status, status FROM article_translations WHERE article_id = ?').all(article.id) as any[];
 
-  // Generate SEO schema
-  const jsonLd = SeoService.generateArticleJsonLd(article);
+  const baseUrl = SeoService.getBaseUrl(req.get('origin') || `${req.protocol}://${req.get('host')}`);
+  const currentSlug = lang === 'en' ? (article.slug_en || article.slug_uk) : article.slug_uk;
+
+  // Never canonical to wylsa.com; strictly self-referencing canonical
+  let canonicalUrl = article.canonical_url;
+  if (!canonicalUrl || canonicalUrl.includes('wylsa.com')) {
+    canonicalUrl = `${baseUrl}/${lang}/article/${encodeURIComponent(currentSlug)}`;
+  }
+
+  const enTranslation = translations.find(t => t.language === 'en');
+  const enSlug = enTranslation?.slug || article.slug_en || article.slug_uk;
+  const ukSlug = article.slug_uk;
+
+  const hreflangs = [
+    { lang: 'uk', href: `${baseUrl}/uk/article/${encodeURIComponent(ukSlug)}` },
+    { lang: 'en', href: `${baseUrl}/en/article/${encodeURIComponent(enSlug)}` },
+    { lang: 'x-default', href: `${baseUrl}/uk/article/${encodeURIComponent(ukSlug)}` }
+  ];
+
+  const metaTitle = (lang === 'en' ? article.meta_title_en : article.meta_title_uk) || article.title;
+  const metaDesc = (lang === 'en' ? article.meta_desc_en : article.meta_desc_uk) || article.excerpt;
+  const ogImage = article.og_image_url || article.featured_image_url || `${baseUrl}/icon.png`;
+
+  const meta = {
+    title: metaTitle,
+    description: metaDesc,
+    canonical: canonicalUrl,
+    robots: article.robots || 'index, follow',
+    ogTitle: metaTitle,
+    ogDescription: metaDesc,
+    ogImage,
+    ogUrl: `${baseUrl}/${lang}/article/${encodeURIComponent(currentSlug)}`,
+    twitterTitle: metaTitle,
+    twitterDescription: metaDesc,
+    twitterImage: ogImage,
+    hreflangs
+  };
+
+  const jsonLd = SeoService.generateArticleJsonLd(article, baseUrl, lang);
+  const categoryName = lang === 'en' ? (article.category_name_en || article.category_name_uk) : (article.category_name_uk || article.category_name_en);
+  const categorySlug = lang === 'en' ? (article.category_slug_en || article.category_slug_uk) : (article.category_slug_uk || article.category_slug_en);
+
+  const breadcrumbs = [
+    { name: lang === 'en' ? 'Home' : 'Головна', url: `/${lang}` },
+    ...(categoryName ? [{ name: categoryName, url: `/${lang}/category/${encodeURIComponent(categorySlug || '')}` }] : []),
+    { name: metaTitle, url: `/${lang}/article/${currentSlug}` }
+  ];
+  const breadcrumbJsonLd = SeoService.generateBreadcrumbJsonLd(breadcrumbs, baseUrl);
 
   res.json({
     article,
     translations,
-    jsonLd
+    meta,
+    jsonLd,
+    breadcrumbJsonLd,
+    breadcrumbs
   });
 });
 
@@ -151,8 +200,25 @@ publicRouter.get('/settings', (req: Request, res: Response) => {
 
 // GET /api/public/ads
 publicRouter.get('/ads', (req: Request, res: Response) => {
-  const slots = AdService.getAllAdSlots().filter(s => s.is_active);
+  const slots = AdService.getPublicActiveSlots();
   res.json(slots);
+});
+
+// GET /api/public/seo/global
+publicRouter.get('/seo/global', (req: Request, res: Response) => {
+  const baseUrl = SeoService.getBaseUrl(req.get('origin') || `${req.protocol}://${req.get('host')}`);
+  const globalSeo = SeoService.getGlobalSettings();
+  const orgJsonLd = SeoService.generateOrganizationJsonLd(baseUrl);
+  const websiteJsonLdUk = SeoService.generateWebsiteJsonLd(baseUrl, 'uk');
+  const websiteJsonLdEn = SeoService.generateWebsiteJsonLd(baseUrl, 'en');
+
+  res.json({
+    seo: globalSeo,
+    orgJsonLd,
+    websiteJsonLdUk,
+    websiteJsonLdEn,
+    baseUrl
+  });
 });
 
 // GET /api/public/seo/:pageType
